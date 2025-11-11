@@ -1,0 +1,622 @@
+{
+  "BTCUSDT": {
+    "h24": {
+      "hit15": 0,
+      "hit60": 0,
+      "counts": {
+        "h15": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        },
+        "h60": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        }
+      }
+    },
+    "h7": {
+      "hit15": 0,
+      "hit60": 0,
+      "counts": {
+        "h15": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        },
+        "h60": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        }
+      }
+    },
+    "h30": {
+      "hit15": 0,
+      "hit60": 0,
+      "counts": {
+        "h15": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        },
+        "h60": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        }
+      }
+    }
+  },
+  "ETHUSDT": {
+    "h24": {
+      "hit15": 0,
+      "hit60": 0,
+      "counts": {
+        "h15": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        },
+        "h60": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        }
+      }
+    },
+    "h7": {
+      "hit15": 0,
+      "hit60": 0,
+      "counts": {
+        "h15": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        },
+        "h60": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        }
+      }
+    },
+    "h30": {
+      "hit15": 0,
+      "hit60": 0,
+      "counts": {
+        "h15": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        },
+        "h60": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        }
+      }
+    }
+  },
+  "XRPUSDT": {
+    "h24": {
+      "hit15": 0,
+      "hit60": 0,
+      "counts": {
+        "h15": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        },
+        "h60": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        }
+      }
+    },
+    "h7": {
+      "hit15": 0,
+      "hit60": 0,
+      "counts": {
+        "h15": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        },
+        "h60": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        }
+      }
+    },
+    "h30": {
+      "hit15": 0,
+      "hit60": 0,
+      "counts": {
+        "h15": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        },
+        "h60": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        }
+      }
+    }
+  },
+  "BNBUSDT": {
+    "h24": {
+      "hit15": 0,
+      "hit60": 0,
+      "counts": {
+        "h15": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        },
+        "h60": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        }
+      }
+    },
+    "h7": {
+      "hit15": 0,
+      "hit60": 0,
+      "counts": {
+        "h15": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        },
+        "h60": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        }
+      }
+    },
+    "h30": {
+      "hit15": 0,
+      "hit60": 0,
+      "counts": {
+        "h15": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        },
+        "h60": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        }
+      }
+    }
+  },
+  "SOLUSDT": {
+    "h24": {
+      "hit15": 0,
+      "hit60": 0,
+      "counts": {
+        "h15": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        },
+        "h60": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        }
+      }
+    },
+    "h7": {
+      "hit15": 0,
+      "hit60": 0,
+      "counts": {
+        "h15": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        },
+        "h60": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        }
+      }
+    },
+    "h30": {
+      "hit15": 0,
+      "hit60": 0,
+      "counts": {
+        "h15": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        },
+        "h60": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        }
+      }
+    }
+  },
+  "DOGEUSDT": {
+    "h24": {
+      "hit15": 0,
+      "hit60": 0,
+      "counts": {
+        "h15": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        },
+        "h60": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        }
+      }
+    },
+    "h7": {
+      "hit15": 0,
+      "hit60": 0,
+      "counts": {
+        "h15": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        },
+        "h60": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        }
+      }
+    },
+    "h30": {
+      "hit15": 0,
+      "hit60": 0,
+      "counts": {
+        "h15": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        },
+        "h60": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        }
+      }
+    }
+  },
+  "ADAUSDT": {
+    "h24": {
+      "hit15": 0,
+      "hit60": 0,
+      "counts": {
+        "h15": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        },
+        "h60": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        }
+      }
+    },
+    "h7": {
+      "hit15": 0,
+      "hit60": 0,
+      "counts": {
+        "h15": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        },
+        "h60": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        }
+      }
+    },
+    "h30": {
+      "hit15": 0,
+      "hit60": 0,
+      "counts": {
+        "h15": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        },
+        "h60": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        }
+      }
+    }
+  },
+  "LTCUSDT": {
+    "h24": {
+      "hit15": 0,
+      "hit60": 0,
+      "counts": {
+        "h15": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        },
+        "h60": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        }
+      }
+    },
+    "h7": {
+      "hit15": 0,
+      "hit60": 0,
+      "counts": {
+        "h15": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        },
+        "h60": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        }
+      }
+    },
+    "h30": {
+      "hit15": 0,
+      "hit60": 0,
+      "counts": {
+        "h15": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        },
+        "h60": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        }
+      }
+    }
+  },
+  "SHIBUSDT": {
+    "h24": {
+      "hit15": 0,
+      "hit60": 0,
+      "counts": {
+        "h15": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        },
+        "h60": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        }
+      }
+    },
+    "h7": {
+      "hit15": 0,
+      "hit60": 0,
+      "counts": {
+        "h15": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        },
+        "h60": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        }
+      }
+    },
+    "h30": {
+      "hit15": 0,
+      "hit60": 0,
+      "counts": {
+        "h15": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        },
+        "h60": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        }
+      }
+    }
+  },
+  "PUMPUSDT": {
+    "h24": {
+      "hit15": 0,
+      "hit60": 0,
+      "counts": {
+        "h15": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        },
+        "h60": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        }
+      }
+    },
+    "h7": {
+      "hit15": 0,
+      "hit60": 0,
+      "counts": {
+        "h15": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        },
+        "h60": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        }
+      }
+    },
+    "h30": {
+      "hit15": 0,
+      "hit60": 0,
+      "counts": {
+        "h15": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        },
+        "h60": {
+          "count": 0,
+          "correct": 0,
+          "wrong": 0,
+          "noTrade": 0,
+          "hit": 0
+        }
+      }
+    }
+  }
+}
