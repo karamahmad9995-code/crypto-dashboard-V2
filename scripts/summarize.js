@@ -1,3 +1,6 @@
+// ====================================================
+//  summarize.js — builds data/summary.json & per-symbol summaries
+// ====================================================
 import fs from "node:fs";
 import path from "node:path";
 
@@ -8,14 +11,13 @@ function parseJSONL(file){
   if(!fs.existsSync(file)) return [];
   const txt = fs.readFileSync(file, "utf8").trim();
   if(!txt) return [];
-  return txt.split("\\n").map(x=>JSON.parse(x));
+  return txt.split("\n").map(x=>JSON.parse(x));
 }
 function writeJSON(file, obj){
   const dir = path.dirname(file);
   fs.mkdirSync(dir, {recursive:true});
   fs.writeFileSync(file, JSON.stringify(obj, null, 2), "utf8");
 }
-
 function windowStats(rows, sinceMs){
   const recent = rows.filter(r => r.t >= sinceMs);
   const byH = {15:[], 60:[]};
