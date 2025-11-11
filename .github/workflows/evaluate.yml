@@ -1,18 +1,12 @@
-name: Predict (15m & 60m)
+name: Evaluate (mark outcomes)
 on:
   workflow_dispatch:
-    inputs:
-      force:
-        description: 'Run immediately (ignore UTC boundary)'
-        type: boolean
-        default: false
   schedule:
-    - cron: "*/15 * * * *"
-    - cron: "0 * * * *"
+    - cron: "*/5 * * * *"
 permissions:
   contents: write
 concurrency:
-  group: predict
+  group: evaluate
   cancel-in-progress: true
 jobs:
   run:
@@ -24,18 +18,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Run predictor
+      - name: Evaluate pending
         env:
           SYMBOLS: "BTCUSDT,ETHUSDT,XRPUSDT,BNBUSDT,SOLUSDT,DOGEUSDT,ADAUSDT,LTCUSDT,SHIBUSDT,PUMPUSDT"
-          FORCE: ${{ github.event.inputs.force == 'true' && '1' || '0' }}
-        run: node scripts/run-predict.js
+        run: node scripts/evaluate.js
       - name: Commit & push if changed
         run: |
           if [ -n "$(git status --porcelain)" ]; then
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git add -A
-            git commit -m "chore(data): update predictions [skip ci]"
+            git commit -m "chore(data): evaluate outcomes [skip ci]"
             git push
           else
             echo "No changes to commit."
