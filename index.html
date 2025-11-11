@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Crypto Predictor — v2 Dashboard</title>
+<title>Crypto Predictor — v2 (CoinCap)</title>
 <link rel="preconnect" href="https://cdn.jsdelivr.net" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
@@ -60,9 +60,7 @@
         <div class="muted">Select a symbol — summary shows 24h hit-rate (if available)</div>
       </div>
     </header>
-    <section class="card">
-      <div class="grid" id="homeGrid"></div>
-    </section>
+    <section class="card"><div class="grid" id="homeGrid"></div></section>
   </section>
 
   <section id="coinView" style="display:none">
@@ -166,129 +164,121 @@
 </div>
 
 <script>
-function last(arr, n){ n = n||1; return arr[arr.length - n]; }
-var BINANCE = 'https://api.binance.com';
-var BASES = ['BTC','ETH','XRP','BNB','SOL','DOGE','ADA','LTC','SHIB','PUMP'];
-var SYMBOLS = BASES.map(function(s){ return s+'USDT'; });
-var LIVE_MS = 5000, GENERAL_MS = 60000, MAX_LIVE = 300, SPARK_N = 25;
-var STORAGE_PREFIX = 'coin_ui_state_v2_';
+// ---------- App config ----------
+const COINCAP = 'https://api.coincap.io/v2';
+const BASES = ['BTC','ETH','XRP','BNB','SOL','DOGE','ADA','LTC','SHIB','PUMP'];
+const SYMBOLS = BASES.map(s=>s+'USDT');
+const LIVE_MS = 5000, GENERAL_MS = 60000, MAX_LIVE = 300, SPARK_N = 25;
+const STORAGE_PREFIX = 'coin_ui_state_v2_';
 
+function splitSymbol(sym){ return { base: sym.replace(/USDT$/,'').toLowerCase(), quote:'usdt' }; }
+async function fetchPrice(sym){
+  const { base } = splitSymbol(sym);
+  const r = await fetch(`${COINCAP}/rates/${base}`, {cache:'no-store'});
+  if(!r.ok) throw new Error('HTTP '+r.status);
+  const j = await r.json();
+  return Number(j.data.rateUsd);
+}
+async function fetchKlines(sym, interval, limit){
+  const { base, quote } = splitSymbol(sym);
+  const end = Date.now();
+  const start = end - (limit*60*1000);
+  const u = `${COINCAP}/candles?exchange=binance&interval=m1&base=${base}&quote=${quote}&start=${start}&end=${end}`;
+  const r = await fetch(u, {cache:'no-store'});
+  if(!r.ok) throw new Error('HTTP '+r.status);
+  const j = await r.json();
+  return j.data.map(k => ({ t:k.period || k.time, c:Number(k.close) }));
+}
+
+// ---------- Utilities ----------
 function $(s){ return document.querySelector(s); }
 function nowMs(){ return Date.now(); }
+function last(arr, n){ n=n||1; return arr[arr.length-n]; }
 function storageKey(sym){ return STORAGE_PREFIX + sym; }
 function readState(sym){ try{ return JSON.parse(localStorage.getItem(storageKey(sym))||'{}'); }catch(e){ return {}; } }
 function writeState(sym, obj){ try{ localStorage.setItem(storageKey(sym), JSON.stringify(obj)); }catch(e){} }
+function formatPriceDyn(v){ return Number(v).toFixed(v>=1?4:6); }
 
+// ---------- Routing ----------
 function route(){
-  var h = location.hash || '#/';
-  if (h === '#/' || h === '#') {
-    document.getElementById('homeView').style.display = '';
-    document.getElementById('coinView').style.display = 'none';
+  const h = location.hash || '#/';
+  if(h==='#/' || h==='#'){
+    $('#homeView').style.display='';
+    $('#coinView').style.display='none';
     buildHome();
-  } else if (h.indexOf('#/coin/')===0) {
-    var part = h.split('/')[2];
-    var sym = part ? part.toUpperCase() : 'BTCUSDT';
-    openCoin(sym);
-  } else {
+  }else if(h.indexOf('#/coin/')===0){
+    const sym = h.split('/')[2] || 'BTCUSDT';
+    openCoin(sym.toUpperCase());
+  }else{
     location.hash = '#/';
   }
 }
 window.addEventListener('hashchange', route);
 
-async function fetchJSON(u){
-  try{
-    var r = await fetch(u, {cache:'no-store'});
-    if(!r.ok) return null;
-    return await r.json();
-  }catch(e){ return null; }
-}
-
+// ---------- Home ----------
+async function fetchJSON(u){ try{ const r=await fetch(u,{cache:'no-store'}); if(!r.ok) return null; return await r.json(); }catch(e){ return null; } }
 async function buildHome(){
-  var grid = document.getElementById('homeGrid'); grid.innerHTML = '';
-  var summary = await fetchJSON('./data/summary.json');
-  SYMBOLS.forEach(function(sym){
-    var b = document.createElement('div');
-    b.className = 'sym';
-    var hit = summary && summary[sym] && summary[sym].h24 ? summary[sym].h24 : null;
-    b.innerHTML = '<div style="font-weight:800;margin-bottom:6px">'+sym.replace('USDT','')+'</div>'
-      + (hit ? ('<div class="muted">Hit 24h 15m: <strong>'+hit.hit15+'%</strong></div><div class="muted">Hit 24h 60m: <strong>'+hit.hit60+'%</strong></div>')
-             : '<div class="muted">No summary yet</div>');
-    b.onclick = function(){ location.hash = '#/coin/'+sym; };
+  const grid = $('#homeGrid'); grid.innerHTML='';
+  const summary = await fetchJSON('./data/summary.json');
+  SYMBOLS.forEach(sym=>{
+    const b=document.createElement('div'); b.className='sym';
+    const hit = summary && summary[sym] && summary[sym].h24 ? summary[sym].h24 : null;
+    b.innerHTML = `<div style="font-weight:800;margin-bottom:6px">${sym.replace('USDT','')}</div>`
+      + (hit ? (`<div class="muted">Hit 24h 15m: <strong>${hit.hit15}%</strong></div><div class="muted">Hit 24h 60m: <strong>${hit.hit60}%</strong></div>`)
+             : `<div class="muted">No summary yet</div>`);
+    b.onclick=()=>{ location.hash = '#/coin/'+sym; };
     grid.appendChild(b);
   });
 }
 
-var activeSym = 'BTCUSDT';
-var contrarian = false;
-var sparkIdx=0, sparkBatch=0, sparkVals=new Array(SPARK_N).fill(null);
-var liveTimer=null, genTimer=null;
-var generalChart=null, liveChart=null, liveSeries=[];
-
-function priceDecimals(p){ var n=Math.abs(Number(p)); if(!isFinite(n)||n===0) return 4; if(n>=1000) return 2; if(n>=100) return 3; if(n>=1) return 4; if(n>=0.1) return 5; if(n>=0.01) return 6; if(n>=0.001) return 8; return 8; }
-function formatPriceDyn(v){ return Number(v).toFixed(priceDecimals(v)); }
-function formatPriceCompact(v){
-  var n = Number(v); if(!isFinite(n)) return {text:'—', small:false};
-  var abs = Math.abs(n); if(abs===0) return {text:'0', small:false};
-  if(abs>=1){ var t=n.toFixed(4); return {text:t, small:false}; }
-  var exp = Math.floor(Math.log10(abs));
-  if(exp < -8){ return {text:n.toExponential(2), small:true}; }
-  var decimals = Math.min(8, Math.max(4, -exp + 2));
-  var t2 = n.toFixed(decimals).replace(/0+$/,'').replace(/\.$/,'');
-  return {text:t2, small:(decimals>6 || t2.length>8)};
-}
+// ---------- Coin view state ----------
+let activeSym='BTCUSDT', contrarian=false;
+let sparkIdx=0, sparkBatch=0, sparkVals=new Array(SPARK_N).fill(null);
+let liveTimer=null, genTimer=null;
+let generalChart=null, liveChart=null, liveSeries=[];
 
 function resetSpark(){
   sparkIdx=0; sparkBatch=0; sparkVals.fill(null);
-  var c=document.getElementById('spark'); c.innerHTML='';
-  for(var i=0;i<SPARK_N;i++){
-    var cell=document.createElement('div'); cell.className='spark-cell';
-    var val=document.createElement('div'); val.className='spark-value'; val.textContent='—';
-    var bar=document.createElement('div'); bar.className='spark-bar';
+  const c=$('#spark'); c.innerHTML='';
+  for(let i=0;i<SPARK_N;i++){
+    const cell=document.createElement('div'); cell.className='spark-cell';
+    const val=document.createElement('div'); val.className='spark-value'; val.textContent='—';
+    const bar=document.createElement('div'); bar.className='spark-bar';
     cell.appendChild(val); cell.appendChild(bar); c.appendChild(cell);
   }
 }
 function clearSparkCells(){
-  var cells=document.getElementById('spark').children;
-  for(var i=0;i<SPARK_N;i++){
-    var cell=cells[i];
+  const cells=$('#spark').children;
+  for(let i=0;i<SPARK_N;i++){
+    const cell=cells[i];
     cell.querySelector('.spark-bar').style.background='#e5e7eb';
     cell.querySelector('.spark-value').textContent='—';
     cell.classList.remove('current');
   }
 }
 function updateSpark(price){
-  var c=document.getElementById('spark'), cells=c.children;
+  const c=$('#spark'), cells=c.children;
   if(sparkIdx===0 && sparkBatch>0){ sparkVals.fill(null); clearSparkCells(); }
   sparkVals[sparkIdx]=Number(price);
-  var filled=sparkVals.filter(function(v){return v!==null});
-  var mn=Math.min.apply(Math, filled), mx=Math.max.apply(Math, filled), span=(mx-mn)||1;
-  for(var i=0;i<SPARK_N;i++){
-    var v=sparkVals[i], cell=cells[i], bar=cell.querySelector('.spark-bar'), label=cell.querySelector('.spark-value');
+  const filled=sparkVals.filter(v=>v!==null);
+  const mn=Math.min(...filled), mx=Math.max(...filled), span=(mx-mn)||1;
+  for(let i=0;i<SPARK_N;i++){
+    const v=sparkVals[i], cell=cells[i], bar=cell.querySelector('.spark-bar'), label=cell.querySelector('.spark-value');
     if(v===null){ bar.style.background='#e5e7eb'; label.textContent='—'; cell.classList.remove('current'); continue; }
-    var t=(v-mn)/span; var hue=120*t; bar.style.background='hsl('+hue+',70%,45%)';
-    var f=formatPriceCompact(v); label.textContent=f.text; if(f.small){ label.classList.add('small'); } else { label.classList.remove('small'); }
+    const t=(v-mn)/span; const hue=120*t; bar.style.background=`hsl(${hue},70%,45%)`;
+    label.textContent = formatPriceDyn(v);
     cell.classList.remove('current');
   }
   cells[sparkIdx].classList.add('current');
   sparkIdx=(sparkIdx+1)%SPARK_N; if(sparkIdx===0) sparkBatch++;
 }
 
-async function fetchPrice(sym){
-  var u=BINANCE+'/api/v3/ticker/price?symbol='+sym;
-  var r=await fetch(u); if(!r.ok) throw new Error('HTTP '+r.status);
-  var j=await r.json(); return Number(j.price);
-}
-async function fetchKlines(sym,interval,limit){
-  var u=BINANCE+'/api/v3/klines?symbol='+sym+'&interval='+interval+'&limit='+limit;
-  var r=await fetch(u); if(!r.ok) throw new Error('HTTP '+r.status);
-  var a=await r.json(); return a.map(function(k){ return {t:k[0], c:Number(k[4])}; });
-}
-
+// ---------- Charts ----------
 Chart.defaults.font.family='ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial';
 Chart.defaults.color='#334155';
-var baseOpts={responsive:true,maintainAspectRatio:false,animation:false,parsing:false,plugins:{legend:{display:false},decimation:{enabled:true,algorithm:'lttb'},tooltip:{mode:'index',intersect:false}},scales:{x:{type:'time',time:{unit:'minute',tooltipFormat:'yyyy-MM-dd HH:mm'}},y:{}}};
+const baseOpts={responsive:true,maintainAspectRatio:false,animation:false,parsing:false,plugins:{legend:{display:false},decimation:{enabled:true,algorithm:'lttb'},tooltip:{mode:'index',intersect:false}},scales:{x:{type:'time',time:{unit:'minute',tooltipFormat:'yyyy-MM-dd HH:mm'}},y:{}}};
 function initCharts(){
-  var gctx=document.getElementById('generalChart'), lctx=document.getElementById('liveChart');
+  const gctx=$('#generalChart'), lctx=$('#liveChart');
   if(generalChart){generalChart.destroy();generalChart=null}
   if(liveChart){liveChart.destroy();liveChart=null}
   generalChart=new Chart(gctx,{type:'line',data:{datasets:[{label:activeSym,data:[],borderColor:'#2e7d32',borderWidth:2,tension:.25,pointRadius:0}]},options:JSON.parse(JSON.stringify(baseOpts))});
@@ -297,326 +287,139 @@ function initCharts(){
 }
 function setGeneralData(points){
   generalChart.data.datasets[0].label=activeSym;
-  generalChart.data.datasets[0].data=points.map(function(p){ return {x:p.t,y:p.c}; });
+  generalChart.data.datasets[0].data=points.map(p=>({x:p.t,y:p.c}));
   generalChart.update('none');
 }
 function addLivePoint(price){
-  var x=nowMs();
+  const x=nowMs();
   liveSeries.push({x:x, y:price});
   if(liveSeries.length>MAX_LIVE) liveSeries.shift();
   liveChart.data.datasets[0].label=activeSym;
   liveChart.data.datasets[0].data=liveSeries;
   liveChart.update('none');
 }
-
-var currRange='24h';
+let currRange='24h';
 async function loadGeneral(range){
   currRange=range;
-  Array.prototype.forEach.call(document.querySelectorAll('.pill.range'), function(b){ b.classList.toggle('on', b.dataset.range===range); });
-  var interval='5m',limit=288;
-  if(range==='7d'){interval='1h';limit=168;}
-  if(range==='30d'){interval='2h';limit=360;}
-  try{ var pts=await fetchKlines(activeSym,interval,limit); setGeneralData(pts); }catch(e){ console.error(e); }
+  document.querySelectorAll('.pill.range').forEach(b=>b.classList.toggle('on', b.dataset.range===range));
+  // نحافظ على 1m دائماً من CoinCap ونغيّر عدد النقاط
+  let limit=288; // 24h = 288×5min تقريبية
+  if(range==='7d')  limit=7*24*60;    // 7 أيام × 60 دقيقة
+  if(range==='30d') limit=30*24*60;   // 30 يوم × 60 دقيقة
+  try{
+    const pts = await fetchKlines(activeSym, limit);
+    setGeneralData(pts);
+  }catch(e){ console.error(e); }
 }
-function startGeneralAuto(){ if(genTimer) clearInterval(genTimer); genTimer=setInterval(function(){loadGeneral(currRange)},GENERAL_MS); }
+function startGeneralAuto(){ if(genTimer) clearInterval(genTimer); genTimer=setInterval(()=>loadGeneral(currRange),GENERAL_MS); }
 
-function ema(arr,p){var k=2/(p+1);var prev=arr[0];var out=[prev];for(var i=1;i<arr.length;i++){prev=arr[i]*k+prev*(1-k);out.push(prev);}return out;}
-function stddev(a){var m=a.reduce(function(x,y){return x+y},0)/a.length;var v=a.reduce(function(x,y){return x+(y-m)*(y-m)},0)/a.length;return Math.sqrt(v);} 
-function rsi14(cl){var g=0,l=0;for(var i=1;i<=14;i++){var d=cl[i]-cl[i-1]; if(d>=0)g+=d;else l-=d;} var avgG=g/14, avgL=(l/14)||1e-6; var rs=avgG/avgL; return 100-(100/(1+rs));}
-function buildFeatures(closes){
-  var ema5=ema(closes,5),ema15=ema(closes,15);
-  var momentum=(closes[closes.length-1]/closes[0])-1;
-  var rets=[]; for(var i=1;i<closes.length;i++) rets.push((closes[i]/closes[i-1])-1);
-  var sigma=stddev(rets),rsi=rsi14(closes);
-  var s5=ema5[ema5.length-1]-ema5[ema5.length-2],s15=ema15[ema15.length-1]-ema15[ema15.length-2];
-  return {rsi:rsi,s5:s5,s15:s15,momentum:momentum,lastRet:rets[rets.length-1],sigma:sigma};
-}
+// ---------- Predictor (frontend simple model for manual/auto cards only) ----------
+function emaF(a,p){const k=2/(p+1);let prev=a[0];const o=[prev];for(let i=1;i<a.length;i++){prev=a[i]*k+prev*(1-k);o.push(prev);}return o;}
+function stddevF(a){const m=a.reduce((x,y)=>x+y,0)/a.length;const v=a.reduce((x,y)=>x+(y-m)*(y-m),0)/a.length;return Math.sqrt(v);}
+function rsi14F(cl){let g=0,l=0;for(let i=1;i<=14;i++){const d=cl[i]-cl[i-1];if(d>=0)g+=d;else l-=d;}const avgG=g/14,avgL=(l/14)||1e-6;const rs=avgG/avgL;return 100-(100/(1+rs));}
+function buildFeat(closes){const e5=emaF(closes,5),e15=emaF(closes,15);const momentum=(last(closes)/closes[0])-1;const rets=[];for(let i=1;i<closes.length;i++)rets.push((closes[i]/closes[i-1])-1);const sigma=stddevF(rets),rsi=rsi14F(closes);const s5=last(e5)-e5[e5.length-2],s15=last(e15)-e15[e15.length-2];return {rsi,s5,s15,momentum,lastRet:last(rets),sigma};}
 function sigmoid(z){return 1/(1+Math.exp(-z));}
 function predictSimple(feat, flip){
-  flip = !!flip;
-  var mu=[50,0,0,0,0,0.003], sd=[12,0.5,0.3,0.01,0.005,0.002];
-  var W=[0.35,0.45,0.25,0.80,0.30,-0.15], b=0;
-  var x=[feat.rsi,feat.s5,feat.s15,feat.momentum,feat.lastRet,feat.sigma].map(function(v,i){return (v-mu[i])/(sd[i]||1)});
-  var z=W.reduce(function(s,w,i){return s+w*x[i]},b), pUp=sigmoid(z);
-  var dir=pUp>=0.5?'Up':'Down'; if(flip) dir=(dir==='Up'?'Down':'Up');
-  var conf=Math.max(0.55,Math.min(0.95,Math.max(pUp,1-pUp)));
-  var rng=Math.max(0.2,Math.min(2.0,0.8*(feat.sigma*100)+0.6*(Math.abs(feat.momentum)*100)));
+  flip=!!flip;
+  const mu=[50,0,0,0,0,0.003], sd=[12,0.5,0.3,0.01,0.005,0.002];
+  const W=[0.35,0.45,0.25,0.80,0.30,-0.15], b=0;
+  const x=[feat.rsi,feat.s5,feat.s15,feat.momentum,feat.lastRet,feat.sigma].map((v,i)=>(v-mu[i])/(sd[i]||1));
+  const z=W.reduce((s,w,i)=>s+w*x[i],b), pUp=sigmoid(z);
+  let dir=pUp>=0.5?'Up':'Down'; if(flip) dir=(dir==='Up'?'Down':'Up');
+  const conf=Math.max(0.55,Math.min(0.95,Math.max(pUp,1-pUp)));
+  const rng=Math.max(0.2,Math.min(2.0,0.8*(Math.max(0.0005,feat.sigma)*100)+0.6*(Math.abs(feat.momentum)*100)));
   return {direction:dir,confidence:conf,rangePct:[Math.max(0.10, rng*0.55), rng]};
 }
 function renderRangePrice(base, loPct, hiPct, dir){
-  var b=Number(base);
-  var lo = (dir==='Up') ? b*(1+loPct/100) : b*(1-hiPct/100);
-  var hi = (dir==='Up') ? b*(1+hiPct/100) : b*(1-loPct/100);
-  var dec = (b>=1?4:6);
-  var loTxt = lo.toFixed(dec), hiTxt = hi.toFixed(dec);
-  if(hiPct>=0.25 && loTxt===hiTxt){
-    while(dec<8 && loTxt===hiTxt){ dec++; loTxt = lo.toFixed(dec); hiTxt = hi.toFixed(dec); }
-  }
+  const b=Number(base);
+  const lo = (dir==='Up') ? b*(1+loPct/100) : b*(1-hiPct/100);
+  const hi = (dir==='Up') ? b*(1+hiPct/100) : b*(1-loPct/100);
+  const dec = (b>=1?4:6);
+  let loTxt = lo.toFixed(dec), hiTxt = hi.toFixed(dec);
+  if(hiPct>=0.25 && loTxt===hiTxt){ let d=dec; while(d<8 && loTxt===hiTxt){ d++; loTxt=lo.toFixed(d); hiTxt=hi.toFixed(d);} }
   return loTxt+' → '+hiTxt;
 }
 
-function nextQuarterUTC(from){
-  from = from || new Date();
-  var d=new Date(from.getTime());
-  var m=d.getUTCMinutes();
-  var add=(15-(m%15))%15 || 15;
-  d.setUTCSeconds(0,0);
-  d.setUTCMinutes(m+add);
-  return d;
-}
-function nextHourUTC(from){
-  from = from || new Date();
-  var d=new Date(from.getTime());
-  d.setUTCSeconds(0,0);
-  d.setUTCMinutes(0);
-  d.setUTCHours(d.getUTCHours()+1);
-  return d;
-}
+// ---------- Auto scheduling ----------
+function nextQuarterUTC(from){ from=from||new Date(); const d=new Date(from.getTime()); const m=d.getUTCMinutes(); const add=(15-(m%15))%15||15; d.setUTCSeconds(0,0); d.setUTCMinutes(m+add); return d; }
+function nextHourUTC(from){ from=from||new Date(); const d=new Date(from.getTime()); d.setUTCSeconds(0,0); d.setUTCMinutes(0); d.setUTCHours(d.getUTCHours()+1); return d; }
 function fmtUTC(dt){ return dt.toISOString().substring(11,19)+' UTC'; }
-function setNextRun(dt,el){ if(el) el.textContent = fmtUTC(dt); }
-
-var auto15Timeout=null, auto60Timeout=null;
+function setNextRun(dt,el){ if(el) el.textContent=fmtUTC(dt); }
+let auto15Timeout=null, auto60Timeout=null;
 function scheduleAuto(h){
   if(h===15 && auto15Timeout){ clearTimeout(auto15Timeout); auto15Timeout=null; }
   if(h===60 && auto60Timeout){ clearTimeout(auto60Timeout); auto60Timeout=null; }
-  var now=new Date();
-  var next = (h===15)? nextQuarterUTC(now) : nextHourUTC(now);
-  setNextRun(next, h===15? document.getElementById('nextRun15') : document.getElementById('nextRun60'));
-  var ms = Math.max(0, next.getTime()-now.getTime());
-  var run = async function(){ try{ await performPrediction(h,'auto'); }finally{ scheduleAuto(h); } };
-  if(h===15) auto15Timeout = setTimeout(run, ms);
-  else auto60Timeout = setTimeout(run, ms);
+  const now=new Date();
+  const next=(h===15)? nextQuarterUTC(now) : nextHourUTC(now);
+  setNextRun(next, h===15? $('#nextRun15') : $('#nextRun60'));
+  const ms=Math.max(0,next.getTime()-now.getTime());
+  const run=async()=>{ try{ await performPrediction(h,'auto'); }finally{ scheduleAuto(h);} };
+  if(h===15) auto15Timeout=setTimeout(run,ms); else auto60Timeout=setTimeout(run,ms);
 }
-function startAutoSchedulers(){
-  try{ performPrediction(15,'auto'); }catch(e){}
-  try{ performPrediction(60,'auto'); }catch(e){}
-  scheduleAuto(15);
-  scheduleAuto(60);
-}
+function startAutoSchedulers(){ try{ performPrediction(15,'auto'); }catch(e){} try{ performPrediction(60,'auto'); }catch(e){} scheduleAuto(15); scheduleAuto(60); }
 function stopAutoSchedulers(){ if(auto15Timeout) clearTimeout(auto15Timeout); if(auto60Timeout) clearTimeout(auto60Timeout); auto15Timeout=auto60Timeout=null; }
 
-var EVAL_MAX=2000;
+// ---------- Evaluation table helpers ----------
+const EVAL_MAX=2000;
 function addEvalRow(horizon, obj){
-  var tbody = horizon===15? document.getElementById('evalBody15') : document.getElementById('evalBody60');
-  var tr=document.createElement('tr'); tr.dataset.id = obj.id;
-  var src=(obj.src||'manual').toLowerCase(); tr.classList.add(src==='auto'?'ev-auto':'ev-manual');
-  var sign = obj.dir==='Up'?'+':'-';
-  var loPct = (obj.range && obj.range[0]!==undefined)? Number(obj.range[0]).toFixed(2) : '0.00';
-  var hiPct = (obj.range && obj.range[1]!==undefined)? Number(obj.range[1]).toFixed(2) : loPct;
-  var pctTxt = sign+loPct+'–'+hiPct+'%';
-  var rangeTxt = formatPriceDyn(obj.priceLo)+' → '+formatPriceDyn(obj.priceHi);
-  var when = new Date(obj.t).toLocaleTimeString();
-  var srcTag = '<span class="tag">'+(src==='auto'?'Auto':'Manual')+'</span>';
-  tr.innerHTML = '    <td>'+when+' '+srcTag+'</td>    <td>'+obj.dir+'</td>    <td>'+Math.round(obj.conf*100)+'%</td>    <td>'+pctTxt+'</td>    <td>'+rangeTxt+'</td>    <td class="'+(obj.outcome==='Pending'?'warn':(obj.outcome==='No-Trade'?'muted2':(obj.outcome==='Correct'?'ok':'bad')))+'">'+obj.outcome+'</td>  ';
+  const tbody = horizon===15? $('#evalBody15') : $('#evalBody60');
+  const tr=document.createElement('tr'); tr.dataset.id=obj.id;
+  const src=(obj.src||'manual').toLowerCase(); tr.classList.add(src==='auto'?'ev-auto':'ev-manual');
+  const sign = obj.dir==='Up'?'+':'-';
+  const loPct = (obj.range && obj.range[0]!=null? Number(obj.range[0]).toFixed(2):'0.00');
+  const hiPct = (obj.range && obj.range[1]!=null? Number(obj.range[1]).toFixed(2):loPct);
+  const pctTxt = sign+loPct+'–'+hiPct+'%';
+  const rangeTxt = formatPriceDyn(obj.priceLo)+' → '+formatPriceDyn(obj.priceHi);
+  const when = new Date(obj.t).toLocaleTimeString();
+  const srcTag = '<span class="tag">'+(src==='auto'?'Auto':'Manual')+'</span>';
+  tr.innerHTML = `
+    <td>${when} ${srcTag}</td>
+    <td>${obj.dir}</td>
+    <td>${Math.round(obj.conf*100)}%</td>
+    <td>${pctTxt}</td>
+    <td>${rangeTxt}</td>
+    <td class="${(obj.outcome==='Pending'?'warn':(obj.outcome==='No-Trade'?'muted2':(obj.outcome==='Correct'?'ok':'bad')))}">${obj.outcome}</td>
+  `;
   tbody.prepend(tr);
   while(tbody.children.length>EVAL_MAX) tbody.children[tbody.children.length-1].remove();
 }
 function updateEvalOutcome(horizon, id, ok){
-  var tbody = horizon===15? document.getElementById('evalBody15') : document.getElementById('evalBody60');
-  var rows = Array.prototype.slice.call(tbody.children);
-  var row = rows.find(function(tr){ return tr.dataset.id===id; });
-  if(row){ var td=row.children[5]; td.textContent = ok? 'Correct':'Wrong'; td.className = ok? 'ok':'bad'; }
+  const tbody = horizon===15? $('#evalBody15') : $('#evalBody60');
+  const rows = Array.from(tbody.children);
+  const row = rows.find(tr=> tr.dataset.id===id);
+  if(row){ const td=row.children[5]; td.textContent = ok? 'Correct':'Wrong'; td.className = ok? 'ok':'bad'; }
 }
-
 function clearPredictionCards(){
-  ['15','60'].forEach(function(h){
-    var m=document.getElementById('predMain'+h);
-    var c=document.getElementById('predConf'+h);
-    var r=document.getElementById('predRange'+h);
-    var tag=document.getElementById('srcTag'+h);
-    if(m) m.textContent='—';
-    if(c) c.textContent='—';
-    if(r) r.textContent='—';
-    if(tag) tag.textContent='—';
+  ['15','60'].forEach(h=>{
+    const m=$('#predMain'+h), c=$('#predConf'+h), r=$('#predRange'+h), tag=$('#srcTag'+h);
+    if(m) m.textContent='—'; if(c) c.textContent='—'; if(r) r.textContent='—'; if(tag) tag.textContent='—';
   });
 }
-function setPredictionCardFromRow(horizon, it){
-  var sign = it.dir==='Up'?'+':'-';
-  var pctLo = (it.range && it.range[0]!=null ? it.range[0] : 0); pctLo = Number(pctLo).toFixed(2);
-  var pctHi = (it.range && it.range[1]!=null ? it.range[1] : 0); pctHi = Number(pctHi).toFixed(2);
-  var mainEl=document.getElementById('predMain'+horizon);
-  var confEl=document.getElementById('predConf'+horizon);
-  var rngEl =document.getElementById('predRange'+horizon);
-  var srcEl =document.getElementById('srcTag'+horizon);
+function setPredictionCardFromRow(h, it){
+  const sign = it.dir==='Up'?'+':'-';
+  const pctLo = (it.range && it.range[0]!=null ? it.range[0] : 0); const pctHi = (it.range && it.range[1]!=null ? it.range[1] : 0);
+  const mainEl=$('#predMain'+h), confEl=$('#predConf'+h), rngEl=$('#predRange'+h), srcEl=$('#srcTag'+h);
   if(mainEl) mainEl.textContent = (it.outcome==='No-Trade') ? 'No-Trade' : (it.dir+' ('+Math.round((it.conf||0)*100)+'%)');
   if(confEl) confEl.textContent = Math.round((it.conf||0)*100)+'%';
-  if(rngEl)  rngEl.textContent  = sign+pctLo+'–'+pctHi+'% · '+formatPriceDyn(it.priceLo)+' → '+formatPriceDyn(it.priceHi)+' USD';
+  if(rngEl)  rngEl.textContent  = sign+Number(pctLo).toFixed(2)+'–'+Number(pctHi).toFixed(2)+'% · '+formatPriceDyn(it.priceLo)+' → '+formatPriceDyn(it.priceHi)+' USD';
   if(srcEl)  srcEl.textContent  = (it.src==='auto') ? 'Auto' : 'Manual';
 }
 
-async function reconcilePending(symbol){
-  var st = readState(symbol);
-  async function checkArr(arr, horizon){
-    var changed=false;
-    for(var i=0;i<(arr||[]).length;i++){
-      var it = arr[i];
-      if(it.outcome==='Pending' && (nowMs() - it.t) >= horizon*60*1000 - 5000){
-        try{
-          var post = await fetchKlines(symbol,'1m',2);
-          var lastClose = post[post.length-1].c;
-          var delta = (lastClose/it.base)-1;
-          var ok = (delta>0 && it.dir==='Up') || (delta<=0 && it.dir==='Down');
-          it.outcome = ok? 'Correct':'Wrong';
-          if(activeSym===symbol){ updateEvalOutcome(horizon, it.id, ok); }
-          changed=true;
-        }catch(e){}
-      }
-    }
-    return changed;
-  }
-  var changed=false;
-  if(st.eval15) changed = await checkArr(st.eval15,15) || changed;
-  if(st.eval60) changed = await checkArr(st.eval60,60) || changed;
-  if(changed) writeState(symbol, st);
-}
-
-async function loadRemoteHistory(symbol){
-  async function read(h){
-    var url = './data/'+symbol+'/'+h+'m.jsonl?cachebust=' + Date.now();
-    try{
-      var r = await fetch(url, {cache: 'no-store'});
-      if(!r.ok) return [];
-      var txt = await r.text();
-      if(!txt) return [];
-      return txt.trim().split('\n').map(function(x){ return JSON.parse(x); });
-    }catch(e){ return []; }
-  }
-  var a15 = await read(15);
-  var a60 = await read(60);
-  return {a15:a15, a60:a60};
-}
-
+// ---------- Perform prediction (front UI only) ----------
 async function performPrediction(horizon, src){
   src = src || 'manual';
   try{
-    var need = horizon===15?16:61;
-    var kl = await fetchKlines(activeSym,'1m',need);
-    var closes = kl.slice(0,-1).map(function(p){return p.c});
-    var base = closes[closes.length-1];
-    document.getElementById('currPrice').innerHTML='<strong>'+base.toFixed(6)+'</strong> USD';
+    const need = horizon===15?16:61;
+    const kl = await fetchKlines(activeSym, need);
+    const closes = kl.slice(0,-1).map(p=>p.c);
+    const base = closes[closes.length-1];
+    $('#currPrice').innerHTML = '<strong>'+formatPriceDyn(base)+'</strong> USD';
 
-    var feat = buildFeatures(closes);
-    var res = predictSimple(feat, contrarian);
+    const feat = buildFeat(closes);
+    const res = predictSimple(feat, contrarian);
 
-    var noise = (res.confidence<0.62) || (res.rangePct[1]<0.30);
-    var label = noise? 'No-Trade' : (res.direction+' ('+Math.round(res.confidence*100)+'%)');
+    const noise = (res.confidence<0.62) || (res.rangePct[1]<0.30);
+    const label = noise? 'No-Trade' : (res.direction+' ('+Math.round(res.confidence*100)+'%)');
 
-    var sign=(res.direction==='Up')?'+':'-';
-    var pctLo = res.rangePct[0].toFixed(2);
-    var pctHi = res.rangePct[1].toFixed(2);
-    var priceLo,priceHi;
-    if(res.direction==='Up'){ priceLo=base*(1+res.rangePct[0]/100); priceHi=base*(1+res.rangePct[1]/100); }
-    else{ priceLo=base*(1-res.rangePct[1]/100); priceHi=base*(1-res.rangePct[0]/100); }
-
-    var ts = nowMs();
-    var id = String(ts)+'-'+horizon;
-    var cardMain = document.getElementById('predMain'+horizon);
-    var cardConf = document.getElementById('predConf'+horizon);
-    var cardRange= document.getElementById('predRange'+horizon);
-    var srcEl    = document.getElementById(horizon===15?'srcTag15':'srcTag60');
-    cardMain.textContent = label;
-    cardConf.textContent = Math.round(res.confidence*100)+'%';
-    cardRange.textContent = sign+pctLo+'–'+pctHi+'% · '+renderRangePrice(base, res.rangePct[0], res.rangePct[1], res.direction)+' USD';
-    if(srcEl) srcEl.textContent = src==='auto' ? 'Auto' : 'Manual';
-
-    var rowObj={ id:id, t: ts, src:src, dir: res.direction, conf: res.confidence, range: res.rangePct, priceLo: priceLo, priceHi: priceHi, base: base, horizon: horizon, outcome: noise? 'No-Trade':'Pending' };
-    addEvalRow(horizon, rowObj);
-
-    var st = readState(activeSym); if(!st.eval15) st.eval15=[]; if(!st.eval60) st.eval60=[];
-    var arr = horizon===15? st.eval15 : st.eval60; arr.unshift(rowObj); if(arr.length>EVAL_MAX) arr.length=EVAL_MAX;
-    if(src==='auto'){ if(horizon===15) st.lastAuto15 = ts; else st.lastAuto60 = ts; }
-    writeState(activeSym, st);
-
-    if(!noise){
-      var symAtPrediction = activeSym;
-      setTimeout(async function(){
-        try{
-          var post = await fetchKlines(symAtPrediction,'1m',2);
-          var lastClose = post[post.length-1].c;
-          var delta = (lastClose/base)-1; var up = delta>0;
-          var ok = (up && res.direction==='Up') || (!up && res.direction==='Down');
-          if(activeSym===symAtPrediction){ updateEvalOutcome(horizon, id, ok); }
-          var st2 = readState(symAtPrediction); var arr2 = horizon===15? st2.eval15 : st2.eval60;
-          var it = (arr2||[]).find(function(x){ return x.id===id; });
-          if(it){ it.outcome = ok? 'Correct':'Wrong'; writeState(symAtPrediction, st2); }
-        }catch(e){}
-      }, horizon*60*1000 + 2000);
-    }
-  }catch(e){ console.error(e); }
-}
-
-async function liveTick(){
-  try{
-    var price = await fetchPrice(activeSym);
-    document.getElementById('currPrice').innerHTML='<strong>'+price.toFixed(6)+'</strong> USD';
-    updateSpark(price); addLivePoint(price);
-  }catch(e){ console.error(e); }
-}
-function startLive(){
-  if(liveTimer) return;
-  document.getElementById('btnStart').textContent='Stop Live'; document.getElementById('btnStart').classList.remove('btn-primary');
-  liveTimer=setInterval(liveTick,LIVE_MS); liveTick();
-}
-function stopLive(){
-  if(liveTimer){ clearInterval(liveTimer); liveTimer=null; }
-  document.getElementById('btnStart').textContent='Start Live'; document.getElementById('btnStart').classList.add('btn-primary');
-}
-
-var generalStarted=false, rangeBtnsBound=false;
-async function openCoin(sym){
-  stopAutoSchedulers();
-  activeSym = (SYMBOLS.indexOf(sym)>=0? sym : 'BTCUSDT');
-  document.getElementById('homeView').style.display='none';
-  document.getElementById('coinView').style.display='';
-  document.getElementById('symName').textContent=activeSym;
-  clearPredictionCards();
-  resetSpark();
-  initCharts();
-
-  if(!rangeBtnsBound){
-    Array.prototype.forEach.call(document.querySelectorAll('.pill.range'), function(b){ b.addEventListener('click', function(){ loadGeneral(b.dataset.range); }); });
-    rangeBtnsBound=true;
-  }
-  document.getElementById('contrarian').onclick=function(){
-    contrarian=!contrarian;
-    var el=document.getElementById('contrarian');
-    el.textContent=contrarian?'On':'Off'; el.classList.toggle('on',contrarian);
-  };
-  document.getElementById('btnStart').onclick=function(){ (liveTimer?stopLive():startLive()); };
-  document.getElementById('btnPredictNow15').onclick=function(){ performPrediction(15,'manual'); };
-  document.getElementById('btnPredictNow60').onclick=function(){ performPrediction(60,'manual'); };
-
-  try{ var p = await fetchPrice(activeSym); document.getElementById('currPrice').innerHTML = '<strong>'+p.toFixed(6)+'</strong> USD'; updateSpark(p);}catch(e){}
-
-  await loadGeneral('24h');
-  if(!generalStarted){ startGeneralAuto(); generalStarted=true; }
-
-  var st = readState(activeSym);
-  var b15=document.getElementById('evalBody15'), b60=document.getElementById('evalBody60');
-  b15.innerHTML=''; b60.innerHTML='';
-  (st.eval15||[]).slice(0,100).reverse().forEach(function(it){ addEvalRow(15,it) });
-  (st.eval60||[]).slice(0,100).reverse().forEach(function(it){ addEvalRow(60,it) });
-
-  if(st.eval15 && st.eval15.length) setPredictionCardFromRow(15, st.eval15[0]);
-  if(st.eval60 && st.eval60.length) setPredictionCardFromRow(60, st.eval60[0]);
-
-  await reconcilePending(activeSym);
-
-  try{
-    var remote = await fetchJSON('./data/'+activeSym+'/summary.json');
-    if(remote && remote.h24){
-      document.getElementById('modelInfo').innerHTML = '<span class="badge ok">calibrated</span> <span class="muted">24h hit 15m:'+remote.h24.hit15+'% · 60m:'+remote.h24.hit60+'%</span>';
-    }else{
-      document.getElementById('modelInfo').innerHTML = '<span class="badge">default v1</span>';
-    }
-  }catch(e){ document.getElementById('modelInfo').innerHTML = '<span class="badge">default v1</span>'; }
-
-  startAutoSchedulers();
-}
-
-(function boot(){
-  route();
-})();
-</script>
-</body>
-</html>
+    const sign=(res.direction==='Up')?'+':'-';
+    const pctLo = res.rangePct[0].toFixed(
