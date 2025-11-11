@@ -1,15 +1,56 @@
+// ====================================================
+//  run-predict.js  —  CoinCap backend for v2
+//  Generates 15m & 60m predictions into data/<SYMBOL>/*.jsonl
+// ====================================================
+
 import fs from "node:fs";
 import path from "node:path";
 
-const BINANCE = "https://api.binance.com";
+// ---------- Config ----------
+const COINCAP = "https://api.coincap.io/v2";
 const SYMBOLS = (process.env.SYMBOLS || "BTCUSDT,ETHUSDT,XRPUSDT,BNBUSDT,SOLUSDT,DOGEUSDT,ADAUSDT,LTCUSDT,SHIBUSDT,PUMPUSDT")
   .split(",").map(s=>s.trim()).filter(Boolean);
 
+// ---------- Small helpers ----------
 const sleep = (ms)=> new Promise(r=>setTimeout(r,ms));
-const nowMs = ()=> Date.now();
 const last = (arr, n=1)=> arr[arr.length-n];
+function ensureDir(p){ fs.mkdirSync(p, {recursive:true}); }
+function appendJSONL(file, obj){ fs.appendFileSync(file, JSON.stringify(obj) + "\n", "utf8"); }
+function rotateIfLarge(file, maxLines=20000){
+  if(!fs.existsSync(file)) return;
+  const buf = fs.readFileSync(file, "utf8").trim();
+  const lines = buf ? buf.split("\n") : [];
+  if(lines.length > maxLines){
+    const slice = lines.slice(-Math.floor(maxLines*0.8));
+    fs.writeFileSync(file, slice.join("\n")+"\n", "utf8");
+  }
+}
+function splitSymbol(sym){ return { base: sym.replace(/USDT$/,""), quote: "USDT" }; }
 
-function ema(arr, p){ const k = 2/(p+1); let prev = arr[0]; const out=[prev]; for(let i=1;i<arr.length;i++){ prev = arr[i]*k + prev*(1-k); out.push(prev);} return out; }
+async function fetchCoinCap(u){
+  const r = await fetch(u, {cache:"no-store"});
+  if(!r.ok) throw new Error(`HTTP ${r.status}: ${u}`);
+  return await r.json();
+}
+
+// ---------- Market data (CoinCap) ----------
+async function fetchKlines(symbol, limitMinutes){
+  const { base, quote } = splitSymbol(symbol);
+  const end = Date.now();
+  const start = end - limitMinutes*60*1000;
+  const url = `${COINCAP}/candles?exchange=binance&interval=m1&base=${base}&quote=${quote}&start=${start}&end=${end}`;
+  const j = await fetchCoinCap(url);
+  // CoinCap fields: time/period, open, high, low, close
+  return j.data.map(k => ({ t: k.period || k.time, c: Number(k.close) }));
+}
+async function fetchPrice(symbol){
+  const { base } = splitSymbol(symbol);
+  const j = await fetchCoinCap(`${COINCAP}/rates/${base.toLowerCase()}`);
+  return Number(j.data.rateUsd);
+}
+
+// ---------- Features / simple model ----------
+function ema(arr, p){ const k=2/(p+1); let prev=arr[0]; const out=[prev]; for(let i=1;i<arr.length;i++){ prev = arr[i]*k + prev*(1-k); out.push(prev);} return out; }
 function stddev(a){ const m=a.reduce((x,y)=>x+y,0)/a.length; const v=a.reduce((x,y)=>x+(y-m)*(y-m),0)/a.length; return Math.sqrt(v); }
 function rsi14(cl){ let g=0,l=0; for(let i=1;i<=14;i++){ const d=cl[i]-cl[i-1]; if(d>=0) g+=d; else l-=d;} const avgG=g/14, avgL=(l/14)||1e-6; const rs=avgG/avgL; return 100-(100/(1+rs)); }
 function buildFeatures(closes){
@@ -22,14 +63,21 @@ function buildFeatures(closes){
 }
 const sigmoid=(z)=>1/(1+Math.exp(-z));
 
+function loadModelIfAny(symbol, horizon){
+  try{
+    const p = path.join("data","models",symbol, `${horizon}m.json`);
+    if(fs.existsSync(p)) return JSON.parse(fs.readFileSync(p,"utf8"));
+  }catch(e){}
+  return null;
+}
 function predictWithWeights(feat, model){
-  if(!model){ // fallback v1
+  if(!model){ // fallback v1 weights
     const mu=[50,0,0,0,0,0.003], sd=[12,0.5,0.3,0.01,0.005,0.002];
     const W=[0.35,0.45,0.25,0.80,0.30,-0.15], b=0;
     const x=[feat.rsi,feat.s5,feat.s15,feat.momentum,feat.lastRet,feat.sigma].map((v,i)=>(v-mu[i])/(sd[i]||1));
     const z=W.reduce((s,w,i)=>s+w*x[i],b), pUp=sigmoid(z);
     const confidence=Math.max(0.55,Math.min(0.95,Math.max(pUp,1-pUp)));
-    const rng=Math.max(0.2,Math.min(2.0,0.8*(feat.sigma*100)+0.6*(Math.abs(feat.momentum)*100)));
+    const rng=Math.max(0.2,Math.min(2.0,0.8*(Math.max(0.0005,feat.sigma)*100)+0.6*(Math.abs(feat.momentum)*100)));
     return {pUp,confidence,rangePct:[Math.max(0.10, rng*0.55), rng]};
   }
   const featsList = model.features;
@@ -50,7 +98,6 @@ function predictWithWeights(feat, model){
   const rng = Math.max(0.2, Math.min(2.5, 0.8*(Math.max(0.0005,feat.sigma)*100) + 0.6*(Math.abs(feat.momentum)*100)));
   return {pUp, confidence, rangePct:[Math.max(0.10, rng*0.55), rng]};
 }
-
 function rangePrice(base, loPct, hiPct, dir){
   const b=Number(base);
   const lo = (dir==='Up') ? b*(1+loPct/100) : b*(1-hiPct/100);
@@ -58,37 +105,7 @@ function rangePrice(base, loPct, hiPct, dir){
   return {priceLo:lo, priceHi:hi};
 }
 
-async function fetchKlines(symbol, interval, limit){
-  const u = `${BINANCE}/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
-  const r = await fetch(u);
-  if(!r.ok) throw new Error(`HTTP ${r.status} for ${symbol}`);
-  const a = await r.json();
-  return a.map(k => ({ t:k[0], c:Number(k[4]) }));
-}
-
-function ensureDir(p){ fs.mkdirSync(p, {recursive:true}); }
-function appendJSONL(file, obj){ fs.appendFileSync(file, JSON.stringify(obj) + "\\n", "utf8"); }
-function rotateIfLarge(file, maxLines=20000){
-  if(!fs.existsSync(file)) return;
-  const buf = fs.readFileSync(file, "utf8").trim();
-  const lines = buf ? buf.split("\\n") : [];
-  if(lines.length > maxLines){
-    const slice = lines.slice(-Math.floor(maxLines*0.8));
-    fs.writeFileSync(file, slice.join("\\n")+"\\n", "utf8");
-  }
-}
-
-function loadModelIfAny(symbol, horizon){
-  try{
-    const p = path.join("data","models",symbol, `${horizon}m.json`);
-    if(fs.existsSync(p)){
-      const txt = fs.readFileSync(p, "utf8");
-      return JSON.parse(txt);
-    }
-  }catch(e){}
-  return null;
-}
-
+// ---------- Main ----------
 async function run(){
   const now = new Date();
   const m = now.getUTCMinutes();
@@ -104,9 +121,12 @@ async function run(){
 
   for(const sym of SYMBOLS){
     try{
-      const kl = await fetchKlines(sym, "1m", 61);
+      // 61 دقيقة للحصول على 60 عائد/ميزة
+      const kl = await fetchKlines(sym, 61);
+      if(!kl || kl.length < 40) throw new Error("not enough candles");
       const closes = kl.slice(0, -1).map(p=>p.c);
       const base = closes[closes.length-1];
+
       const feat = buildFeatures(closes);
 
       const saveOne = async (h)=>{
@@ -132,12 +152,13 @@ async function run(){
       if(FORCE || do15) await saveOne(15);
       if(FORCE || do60) await saveOne(60);
 
-      await new Promise(r=>setTimeout(r,150));
+      await sleep(150);
     }catch(e){
-      console.error(`[ERR] ${sym}:`, e.message);
-      await new Promise(r=>setTimeout(r,250));
+      console.error(`[ERR] ${sym}: ${e.message}`);
+      await sleep(250);
     }
   }
   console.log("[DONE]");
 }
+
 run().catch(e=>{ console.error(e); process.exit(1); });
