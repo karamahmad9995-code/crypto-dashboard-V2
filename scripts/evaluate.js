@@ -1,27 +1,49 @@
+// ====================================================
+//  evaluate.js — marks Pending -> Correct/Wrong (CoinCap)
+// ====================================================
 import fs from "node:fs";
 import path from "node:path";
 
-const BINANCE = "https://api.binance.com";
+const COINCAP = "https://api.coincap.io/v2";
 const SYMBOLS = (process.env.SYMBOLS || "BTCUSDT,ETHUSDT,XRPUSDT,BNBUSDT,SOLUSDT,DOGEUSDT,ADAUSDT,LTCUSDT,SHIBUSDT,PUMPUSDT")
   .split(",").map(s=>s.trim()).filter(Boolean);
 
-async function fetchKlinesRange(symbol, startTs, endTs){
-  const u = `${BINANCE}/api/v3/klines?symbol=${symbol}&interval=1m&startTime=${startTs}&endTime=${endTs}&limit=2`;
-  const r = await fetch(u);
-  if(!r.ok) throw new Error(`HTTP ${r.status} for ${symbol}`);
+function splitSymbol(sym){ return { base: sym.replace(/USDT$/,"").toLowerCase(), quote: "usdt" }; }
+
+async function fetchCoinCap(u){
+  const r = await fetch(u, {cache:"no-store"});
+  if(!r.ok) throw new Error(`HTTP ${r.status}: ${u}`);
   return await r.json();
+}
+
+// شمعة دقيقة واحدة تغطي اللحظة بعد الاستحقاق
+async function fetchCloseAfterDue(sym, dueMs){
+  const { base, quote } = splitSymbol(sym);
+  const start = dueMs;
+  const end   = dueMs + 120000; // +120s
+  const url = `${COINCAP}/candles?exchange=binance&interval=m1&base=${base}&quote=${quote}&start=${start}&end=${end}`;
+  try{
+    const j = await fetchCoinCap(url);
+    if(j.data && j.data.length>0) return Number(j.data[0].close);
+  }catch(e){}
+  // Fallback: السعر الحالي
+  try{
+    const j = await fetchCoinCap(`${COINCAP}/rates/${base}`);
+    return Number(j.data.rateUsd);
+  }catch(e){}
+  return null;
 }
 
 function parseJSONL(file){
   if(!fs.existsSync(file)) return [];
   const txt = fs.readFileSync(file, "utf8").trim();
   if(!txt) return [];
-  return txt.split("\\n").map(x=>JSON.parse(x));
+  return txt.split("\n").map(x=>JSON.parse(x));
 }
 function writeJSONL(file, rows){
   const dir = path.dirname(file);
   fs.mkdirSync(dir, {recursive:true});
-  fs.writeFileSync(file, rows.map(o=>JSON.stringify(o)).join("\\n")+"\\n", "utf8");
+  fs.writeFileSync(file, rows.map(o=>JSON.stringify(o)).join("\n")+"\n", "utf8");
 }
 
 async function evaluateFile(sym, horizon){
@@ -36,20 +58,7 @@ async function evaluateFile(sym, horizon){
     const due = it.t + horizon*60*1000;
     if(now < due) continue;
 
-    let close = null;
-    try{
-      const a = await fetchKlinesRange(sym, due, due + 120000);
-      if(a && a.length>0){
-        close = Number(a[0][4]);
-      }
-    }catch(e){}
-
-    if(close==null){
-      try{
-        const r=await fetch(`${BINANCE}/api/v3/ticker/price?symbol=${sym}`);
-        if(r.ok){ const j=await r.json(); close = Number(j.price); }
-      }catch(e){}
-    }
+    const close = await fetchCloseAfterDue(sym, due);
     if(close==null) continue;
 
     const delta = (close/it.base)-1;
