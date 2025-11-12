@@ -1,1 +1,0 @@
-# Crypto Predictor — v2
