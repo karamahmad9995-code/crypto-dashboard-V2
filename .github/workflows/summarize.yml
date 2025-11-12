@@ -1,0 +1,35 @@
+name: Summarize (daily stats)
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "5 2 * * *"
+permissions:
+  contents: write
+concurrency:
+  group: summarize
+  cancel-in-progress: true
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Summarize
+        env:
+          SYMBOLS: "BTCUSDT,ETHUSDT,XRPUSDT,BNBUSDT,SOLUSDT,DOGEUSDT,ADAUSDT,LTCUSDT,SHIBUSDT,PUMPUSDT"
+        run: node scripts/summarize.js
+      - name: Commit & push if changed
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add -A
+            git commit -m "chore(data): summarize [skip ci]"
+            git push
+          else
+            echo "No changes to commit."
+          fi
