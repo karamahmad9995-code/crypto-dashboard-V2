@@ -1,0 +1,38 @@
+name: Fetch history (raw 1m data)
+
+on:
+  workflow_dispatch:      # تشغيل يدوي
+  schedule:
+    - cron: "0 * * * *"   # كل ساعة (تقدر تعدلها لاحقاً)
+
+permissions:
+  contents: write         # للسماح بالـ commit من داخل الـ Action
+
+jobs:
+  fetch-history:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run history fetcher
+        run: |
+          python scripts/fetch_history.py
+
+      - name: Commit & push data changes
+        run: |
+          if [[ -n "$(git status --porcelain)" ]]; then
+            git config user.name "github-actions"
+            git config user.email "github-actions@users.noreply.github.com"
+            git add data
+            git commit -m "Update raw 1m history [skip ci]"
+            git push
+          else
+            echo "No changes to commit."
+          fi
