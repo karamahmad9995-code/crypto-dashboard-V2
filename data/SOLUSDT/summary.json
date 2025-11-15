@@ -1,3 +1,9 @@
 {
-  "symbol": "SOLUSDT"
+  "symbol": "SOLUSDT",
+  "h24": {
+    "hit15": 0,
+    "n15": 0,
+    "hit60": 0,
+    "n60": 0
+  }
 }

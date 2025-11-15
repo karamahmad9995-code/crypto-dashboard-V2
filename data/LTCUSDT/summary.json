@@ -1,3 +1,9 @@
 {
-  "symbol": "LTCUSDT"
+  "symbol": "LTCUSDT",
+  "h24": {
+    "hit15": 100,
+    "n15": 1,
+    "hit60": 0,
+    "n60": 0
+  }
 }
