@@ -190,7 +190,7 @@ function route(){
     var sym = part ? part.toUpperCase() : 'BTCUSDT';
     openCoin(sym);
   } else {
-    location.hash = '#/';
+    location.hash = '#/'
   }
 }
 window.addEventListener('hashchange', route);
@@ -203,25 +203,146 @@ async function fetchJSON(u){
   }catch(e){ return null; }
 }
 
-async function buildHome(){
-  var grid = document.getElementById('homeGrid'); grid.innerHTML = '';
-  var summary = await fetchJSON('./data/summary.json');
-  SYMBOLS.forEach(function(sym){
-    var b = document.createElement('div');
-    b.className = 'sym';
-    var hit = summary && summary[sym] && summary[sym].h24 ? summary[sym].h24 : null;
-    b.innerHTML = '<div style="font-weight:800;margin-bottom:6px">'+sym.replace('USDT','')+'</div>'
-      + (hit ? ('<div class="muted">Hit 24h 15m: <strong>'+hit.hit15+'%</strong></div><div class="muted">Hit 24h 60m: <strong>'+hit.hit60+'%</strong></div>')
-             : '<div class="muted">No summary yet</div>');
-    b.onclick = function(){ location.hash = '#/coin/'+sym; };
-    grid.appendChild(b);
-  });
+// ===== Robust data fetch: multi-provider with proxies =====
+var PROXIES = [
+  function(u){ return 'https://cors.isomorphic-git.org/'+u; },
+  function(u){ return 'https://api.allorigins.win/raw?url='+encodeURIComponent(u); }
+];
+
+async function httpText(u){
+  // try direct
+  try{
+    var r = await fetch(u,{cache:'no-store'});
+    if(r.ok) return await r.text();
+  }catch(e){}
+  // try proxies
+  for(var i=0;i<PROXIES.length;i++){
+    try{
+      var r2 = await fetch(PROXIES[i](u),{cache:'no-store'});
+      if(r2.ok) return await r2.text();
+    }catch(e){}
+  }
+  throw new Error('Fetch failed: '+u);
 }
 
-var activeSym = 'BTCUSDT';
-var contrarian = false;
-var sparkIdx=0, sparkBatch=0, sparkVals=new Array(SPARK_N).fill(null);
-var liveTimer=null, genTimer=null;
+async function httpJSON(u){
+  var t = await httpText(u);
+  try{
+    return JSON.parse(t);
+  }catch(e){
+    throw new Error('JSON parse error: '+u);
+  }
+}
+
+// Provider maps
+var COINCAP_IDS = {
+  BTC:'bitcoin',ETH:'ethereum',XRP:'xrp',BNB:'binance-coin',
+  SOL:'solana',DOGE:'dogecoin',ADA:'cardano',LTC:'litecoin',
+  SHIB:'shiba-inu',PUMP:'pump'
+};
+function splitSymbol(s){
+  return {base:s.replace(/USDT$/,'').toUpperCase(), quote:'USDT'};
+}
+
+async function fetchPrice(sym){
+  var base = splitSymbol(sym).base;
+  // 1) Binance
+  try{
+    var jb = await httpJSON(BINANCE+'/api/v3/ticker/price?symbol='+sym);
+    if(jb && jb.price) return Number(jb.price);
+  }catch(e){}
+  // 2) CryptoCompare
+  try{
+    var jc = await httpJSON('https://min-api.cryptocompare.com/data/price?fsym='+base+'&tsyms=USD');
+    if(jc && jc.USD) return Number(jc.USD);
+  }catch(e){}
+  // 3) CoinCap
+  try{
+    var id = COINCAP_IDS[base];
+    if(id){
+      var jcc = await httpJSON('https://api.coincap.io/v2/assets/'+id);
+      if(jcc && jcc.data && jcc.data.priceUsd) return Number(jcc.data.priceUsd);
+    }
+  }catch(e){}
+  throw new Error('No price provider');
+}
+
+async function fetchKlines(sym, interval, limit){
+  // Normalize inputs
+  limit = Math.min(2000, Math.max(2, limit|0));
+  interval = String(interval||'1m');
+  var base = splitSymbol(sym).base;
+
+  // Helper to map to CryptoCompare endpoints
+  async function ccMinute(agg){
+    var j = await httpJSON('https://min-api.cryptocompare.com/data/v2/histominute?fsym='+base+'&tsym=USD&limit='+limit+'&aggregate='+(agg||1));
+    if(j && j.Data && j.Data.Data && j.Data.Data.length){
+      return j.Data.Data.map(function(p){ return {t:p.time*1000, c:Number(p.close)}; });
+    }
+    return null;
+  }
+  async function ccHour(agg){
+    var j = await httpJSON('https://min-api.cryptocompare.com/data/v2/histohour?fsym='+base+'&tsym=USD&limit='+limit+'&aggregate='+(agg||1));
+    if(j && j.Data && j.Data.Data && j.Data.Data.length){
+      return j.Data.Data.map(function(p){ return {t:p.time*1000, c:Number(p.close)}; });
+    }
+    return null;
+  }
+
+  // 1) Binance first
+  try{
+    var jb = await httpJSON(BINANCE+'/api/v3/klines?symbol='+sym+'&interval='+interval+'&limit='+Math.min(1000,limit));
+    if(Array.isArray(jb) && jb.length){
+      return jb.map(function(k){ return {t:k[0], c:Number(k[4])}; });
+    }
+  }catch(e){}
+
+  // 2) CryptoCompare fallbacks per interval
+  try{
+    if(interval==='1m'){
+      var r1 = await ccMinute(1); if(r1) return r1;
+    }else if(interval==='5m'){
+      var r5 = await ccMinute(5); if(r5) return r5;
+    }else if(interval==='1h'){
+      var rh1 = await ccHour(1); if(rh1) return rh1;
+    }else if(interval==='2h'){
+      var rh2 = await ccHour(2); if(rh2) return rh2;
+    }
+  }catch(e){}
+
+  // 3) CoinCap candles (best-effort). Intervals: m1,m5,h1 (h2 may not exist).
+  try{
+    var id2 = COINCAP_IDS[base];
+    if(id2){
+      var end = Date.now();
+      var spanMs = (interval==='1m')? limit*60000 : (interval==='5m')? limit*5*60000 : (interval==='1h')? limit*3600000 : limit*2*3600000;
+      var start = end - spanMs;
+      var ccInt = (interval==='1m')? 'm1' : (interval==='5m')? 'm5' : (interval==='1h')? 'h1' : 'h1';
+      var jcc2 = await httpJSON('https://api.coincap.io/v2/candles?exchange=binance&interval='+ccInt+'&base='+id2+'&quote=usd&start='+start+'&end='+end);
+      if(jcc2 && jcc2.data && jcc2.data.length){
+        return jcc2.data.map(function(k){ return {t:k.period||k.time, c:Number(k.close)}; });
+      }
+    }
+  }catch(e){}
+
+  // 4) Last resort: synth series from current price so UI doesn't crash
+  try{
+    var p = await fetchPrice(sym);
+    var now = Date.now();
+    var arr=[];
+    for(var i=limit;i>0;i--){
+      arr.push({t: now - i*60000, c: p});
+    }
+    return arr;
+  }catch(e){}
+
+  // 5) give up
+  return [];
+}
+
+Chart.defaults.font.family='ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial';
+Chart.defaults.color='#334155';
+var baseOpts={responsive:true,maintainAspectRatio:false,animation:false,parsing:false,plugins:{legend:{display:false},decimation:{enabled:true,algorithm:'lttb'},tooltip:{mode:'index',intersect:false}},scales:{x:{type:'time',time:{unit:'minute',tooltipFormat:'yyyy-MM-dd HH:mm'}},y:{}}};
 var generalChart=null, liveChart=null, liveSeries=[];
 
 function priceDecimals(p){ var n=Math.abs(Number(p)); if(!isFinite(n)||n===0) return 4; if(n>=1000) return 2; if(n>=100) return 3; if(n>=1) return 4; if(n>=0.1) return 5; if(n>=0.01) return 6; if(n>=0.001) return 8; return 8; }
@@ -273,20 +394,6 @@ function updateSpark(price){
   sparkIdx=(sparkIdx+1)%SPARK_N; if(sparkIdx===0) sparkBatch++;
 }
 
-async function fetchPrice(sym){
-  var u=BINANCE+'/api/v3/ticker/price?symbol='+sym;
-  var r=await fetch(u); if(!r.ok) throw new Error('HTTP '+r.status);
-  var j=await r.json(); return Number(j.price);
-}
-async function fetchKlines(sym,interval,limit){
-  var u=BINANCE+'/api/v3/klines?symbol='+sym+'&interval='+interval+'&limit='+limit;
-  var r=await fetch(u); if(!r.ok) throw new Error('HTTP '+r.status);
-  var a=await r.json(); return a.map(function(k){ return {t:k[0], c:Number(k[4])}; });
-}
-
-Chart.defaults.font.family='ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial';
-Chart.defaults.color='#334155';
-var baseOpts={responsive:true,maintainAspectRatio:false,animation:false,parsing:false,plugins:{legend:{display:false},decimation:{enabled:true,algorithm:'lttb'},tooltip:{mode:'index',intersect:false}},scales:{x:{type:'time',time:{unit:'minute',tooltipFormat:'yyyy-MM-dd HH:mm'}},y:{}}};
 function initCharts(){
   var gctx=document.getElementById('generalChart'), lctx=document.getElementById('liveChart');
   if(generalChart){generalChart.destroy();generalChart=null}
@@ -298,12 +405,21 @@ function initCharts(){
 function setGeneralData(points){
   generalChart.data.datasets[0].label=activeSym;
   generalChart.data.datasets[0].data=points.map(function(p){ return {x:p.t,y:p.c}; });
+  var ys = points.map(function(p){return p.c});
+  var mn = Math.min.apply(Math, ys), mx = Math.max.apply(Math, ys);
+  if(!isFinite(mn) || !isFinite(mx)){ generalChart.update('none'); return; }
+  if(mx===mn){ var pad = mn * 0.003 || 0.003; generalChart.options.scales.y.min = mn - pad; generalChart.options.scales.y.max = mx + pad; }
+  else{ var span = mx - mn; var pad2 = span*0.08; generalChart.options.scales.y.min = mn - pad2; generalChart.options.scales.y.max = mx + pad2; }
   generalChart.update('none');
 }
 function addLivePoint(price){
   var x=nowMs();
   liveSeries.push({x:x, y:price});
   if(liveSeries.length>MAX_LIVE) liveSeries.shift();
+  var ys = liveSeries.map(function(p){return p.y});
+  var mn = Math.min.apply(Math, ys), mx = Math.max.apply(Math, ys);
+  if(mx===mn){ var pad = mn * 0.003 || 0.003; liveChart.options.scales.y.min = mn - pad; liveChart.options.scales.y.max = mx + pad; }
+  else{ var span = mx - mn; var pad2 = span*0.08; liveChart.options.scales.y.min = mn - pad2; liveChart.options.scales.y.max = mx + pad2; }
   liveChart.data.datasets[0].label=activeSym;
   liveChart.data.datasets[0].data=liveSeries;
   liveChart.update('none');
@@ -316,8 +432,12 @@ async function loadGeneral(range){
   var interval='5m',limit=288;
   if(range==='7d'){interval='1h';limit=168;}
   if(range==='30d'){interval='2h';limit=360;}
-  try{ var pts=await fetchKlines(activeSym,interval,limit); setGeneralData(pts); }catch(e){ console.error(e); }
+  try{
+    var pts=await fetchKlines(activeSym,interval,limit);
+    if(pts && pts.length){ setGeneralData(pts); }
+  }catch(e){ console.error(e); }
 }
+var genTimer=null;
 function startGeneralAuto(){ if(genTimer) clearInterval(genTimer); genTimer=setInterval(function(){loadGeneral(currRange)},GENERAL_MS); }
 
 function ema(arr,p){var k=2/(p+1);var prev=arr[0];var out=[prev];for(var i=1;i<arr.length;i++){prev=arr[i]*k+prev*(1-k);out.push(prev);}return out;}
@@ -418,31 +538,10 @@ function updateEvalOutcome(horizon, id, ok){
   if(row){ var td=row.children[5]; td.textContent = ok? 'Correct':'Wrong'; td.className = ok? 'ok':'bad'; }
 }
 
-function clearPredictionCards(){
-  ['15','60'].forEach(function(h){
-    var m=document.getElementById('predMain'+h);
-    var c=document.getElementById('predConf'+h);
-    var r=document.getElementById('predRange'+h);
-    var tag=document.getElementById('srcTag'+h);
-    if(m) m.textContent='—';
-    if(c) c.textContent='—';
-    if(r) r.textContent='—';
-    if(tag) tag.textContent='—';
-  });
-}
-function setPredictionCardFromRow(horizon, it){
-  var sign = it.dir==='Up'?'+':'-';
-  var pctLo = (it.range && it.range[0]!=null ? it.range[0] : 0); pctLo = Number(pctLo).toFixed(2);
-  var pctHi = (it.range && it.range[1]!=null ? it.range[1] : 0); pctHi = Number(pctHi).toFixed(2);
-  var mainEl=document.getElementById('predMain'+horizon);
-  var confEl=document.getElementById('predConf'+horizon);
-  var rngEl =document.getElementById('predRange'+horizon);
-  var srcEl =document.getElementById('srcTag'+horizon);
-  if(mainEl) mainEl.textContent = (it.outcome==='No-Trade') ? 'No-Trade' : (it.dir+' ('+Math.round((it.conf||0)*100)+'%)');
-  if(confEl) confEl.textContent = Math.round((it.conf||0)*100)+'%';
-  if(rngEl)  rngEl.textContent  = sign+pctLo+'–'+pctHi+'% · '+formatPriceDyn(it.priceLo)+' → '+formatPriceDyn(it.priceHi)+' USD';
-  if(srcEl)  srcEl.textContent  = (it.src==='auto') ? 'Auto' : 'Manual';
-}
+var activeSym = 'BTCUSDT';
+var contrarian = false;
+var sparkIdx=0, sparkBatch=0, sparkVals=new Array(SPARK_N).fill(null);
+var liveTimer=null, genTimer=null;
 
 async function reconcilePending(symbol){
   var st = readState(symbol);
@@ -453,6 +552,7 @@ async function reconcilePending(symbol){
       if(it.outcome==='Pending' && (nowMs() - it.t) >= horizon*60*1000 - 5000){
         try{
           var post = await fetchKlines(symbol,'1m',2);
+          if(!post || !post.length) continue;
           var lastClose = post[post.length-1].c;
           var delta = (lastClose/it.base)-1;
           var ok = (delta>0 && it.dir==='Up') || (delta<=0 && it.dir==='Down');
@@ -486,14 +586,41 @@ async function loadRemoteHistory(symbol){
   return {a15:a15, a60:a60};
 }
 
+function clearPredictionCards(){
+  ['15','60'].forEach(function(h){
+    var m=document.getElementById('predMain'+h);
+    var c=document.getElementById('predConf'+h);
+    var r=document.getElementById('predRange'+h);
+    var tag=document.getElementById('srcTag'+h);
+    if(m) m.textContent='—';
+    if(c) c.textContent='—';
+    if(r) r.textContent='—';
+    if(tag) tag.textContent='—';
+  });
+}
+function setPredictionCardFromRow(horizon, it){
+  var sign = it.dir==='Up'?'+':'-';
+  var pctLo = (it.range && it.range[0]!=null ? it.range[0] : 0); pctLo = Number(pctLo).toFixed(2);
+  var pctHi = (it.range && it.range[1]!=null ? it.range[1] : 0); pctHi = Number(pctHi).toFixed(2);
+  var mainEl=document.getElementById('predMain'+horizon);
+  var confEl=document.getElementById('predConf'+horizon);
+  var rngEl =document.getElementById('predRange'+horizon);
+  var srcEl =document.getElementById('srcTag'+horizon);
+  if(mainEl) mainEl.textContent = (it.outcome==='No-Trade') ? 'No-Trade' : (it.dir+' ('+Math.round((it.conf||0)*100)+'%)');
+  if(confEl) confEl.textContent = Math.round((it.conf||0)*100)+'%';
+  if(rngEl)  rngEl.textContent  = sign+pctLo+'–'+pctHi+'% · '+formatPriceDyn(it.priceLo)+' → '+formatPriceDyn(it.priceHi)+' USD';
+  if(srcEl)  srcEl.textContent  = (it.src==='auto') ? 'Auto' : 'Manual';
+}
+
 async function performPrediction(horizon, src){
   src = src || 'manual';
   try{
     var need = horizon===15?16:61;
     var kl = await fetchKlines(activeSym,'1m',need);
+    if(!kl || kl.length<2) return;
     var closes = kl.slice(0,-1).map(function(p){return p.c});
     var base = closes[closes.length-1];
-    document.getElementById('currPrice').innerHTML='<strong>'+base.toFixed(6)+'</strong> USD';
+    document.getElementById('currPrice').innerHTML='<strong>'+formatPriceDyn(base)+'</strong> USD';
 
     var feat = buildFeatures(closes);
     var res = predictSimple(feat, contrarian);
@@ -532,6 +659,7 @@ async function performPrediction(horizon, src){
       setTimeout(async function(){
         try{
           var post = await fetchKlines(symAtPrediction,'1m',2);
+          if(!post || !post.length) return;
           var lastClose = post[post.length-1].c;
           var delta = (lastClose/base)-1; var up = delta>0;
           var ok = (up && res.direction==='Up') || (!up && res.direction==='Down');
@@ -548,7 +676,7 @@ async function performPrediction(horizon, src){
 async function liveTick(){
   try{
     var price = await fetchPrice(activeSym);
-    document.getElementById('currPrice').innerHTML='<strong>'+price.toFixed(6)+'</strong> USD';
+    document.getElementById('currPrice').innerHTML='<strong>'+formatPriceDyn(price)+'</strong> USD';
     updateSpark(price); addLivePoint(price);
   }catch(e){ console.error(e); }
 }
@@ -563,6 +691,21 @@ function stopLive(){
 }
 
 var generalStarted=false, rangeBtnsBound=false;
+async function buildHome(){
+  var grid = document.getElementById('homeGrid'); grid.innerHTML = '';
+  var summary = await fetchJSON('./data/summary.json');
+  SYMBOLS.forEach(function(sym){
+    var b = document.createElement('div');
+    b.className = 'sym';
+    var hit = summary && summary[sym] && summary[sym].h24 ? summary[sym].h24 : null;
+    b.innerHTML = '<div style="font-weight:800;margin-bottom:6px">'+sym.replace('USDT','')+'</div>'
+      + (hit ? ('<div class="muted">Hit 24h 15m: <strong>'+hit.hit15+'%</strong></div><div class="muted">Hit 24h 60m: <strong>'+hit.hit60+'%</strong></div>')
+             : '<div class="muted">No summary yet</div>');
+    b.onclick = function(){ location.hash = '#/coin/'+sym; };
+    grid.appendChild(b);
+  });
+}
+
 async function openCoin(sym){
   stopAutoSchedulers();
   activeSym = (SYMBOLS.indexOf(sym)>=0? sym : 'BTCUSDT');
@@ -586,7 +729,11 @@ async function openCoin(sym){
   document.getElementById('btnPredictNow15').onclick=function(){ performPrediction(15,'manual'); };
   document.getElementById('btnPredictNow60').onclick=function(){ performPrediction(60,'manual'); };
 
-  try{ var p = await fetchPrice(activeSym); document.getElementById('currPrice').innerHTML = '<strong>'+p.toFixed(6)+'</strong> USD'; updateSpark(p);}catch(e){}
+  try{
+    var price = await fetchPrice(activeSym);
+    document.getElementById('currPrice').innerHTML='<strong>'+formatPriceDyn(price)+'</strong> USD';
+    updateSpark(price); addLivePoint(price);
+  }catch(e){}
 
   await loadGeneral('24h');
   if(!generalStarted){ startGeneralAuto(); generalStarted=true; }
@@ -600,8 +747,6 @@ async function openCoin(sym){
   if(st.eval15 && st.eval15.length) setPredictionCardFromRow(15, st.eval15[0]);
   if(st.eval60 && st.eval60.length) setPredictionCardFromRow(60, st.eval60[0]);
 
-  await reconcilePending(activeSym);
-
   try{
     var remote = await fetchJSON('./data/'+activeSym+'/summary.json');
     if(remote && remote.h24){
@@ -613,6 +758,8 @@ async function openCoin(sym){
 
   startAutoSchedulers();
 }
+
+var sparkIdx=0, sparkBatch=0, sparkVals=new Array(SPARK_N).fill(null);
 
 (function boot(){
   route();
