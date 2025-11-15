@@ -1,34 +1,37 @@
-name: Summarize (daily stats)
+name: Summarize performance (24h hit-rate)
+
 on:
-  workflow_dispatch:
+  workflow_dispatch:      # تشغيل يدوي من Actions
   schedule:
-    - cron: "5 2 * * *"
+    - cron: "0 * * * *"   # كل ساعة (تقدر تعدلها لاحقاً)
+
 permissions:
   contents: write
-concurrency:
-  group: summarize
-  cancel-in-progress: true
+
 jobs:
-  run:
+  summarize:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          fetch-depth: 0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      - name: Summarize
-        env:
-          SYMBOLS: "BTCUSDT,ETHUSDT,XRPUSDT,BNBUSDT,SOLUSDT,DOGEUSDT,ADAUSDT,LTCUSDT,SHIBUSDT,PUMPUSDT"
-        run: node scripts/summarize.js
-      - name: Commit & push if changed
+          python-version: "3.11"
+
+      - name: Run summarize script
         run: |
-          if [ -n "$(git status --porcelain)" ]; then
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add -A
-            git commit -m "chore(data): summarize [skip ci]"
+          python scripts/summarize.py
+
+      - name: Commit & push summary data
+        run: |
+          if [[ -n "$(git status --porcelain)" ]]; then
+            git config user.name "github-actions"
+            git config user.email "github-actions@users.noreply.github.com"
+            git add data
+            git commit -m "Update summaries (24h hit-rate) [skip ci]"
             git push
           else
             echo "No changes to commit."
