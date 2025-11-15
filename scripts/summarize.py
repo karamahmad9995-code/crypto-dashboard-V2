@@ -21,7 +21,7 @@ def read_jsonl(path):
                 continue
     return rows
 
-def compute_hit_rate(rows, horizon_ms):
+def compute_hit_rate(rows):
     """
     rows: قائمة توقعات (من 15m.jsonl أو 60m.jsonl)
     نرجع: (hit_pct, n_trades)
@@ -48,7 +48,8 @@ def compute_hit_rate(rows, horizon_ms):
             correct += 1
 
     if total == 0:
-        return None, 0
+        # ما في صفقات ضمن النافذة → 0% و 0 صفقة
+        return 0, 0
 
     hit_pct = round((correct / total) * 100)
     return hit_pct, total
@@ -70,40 +71,35 @@ def main():
         rows_15 = read_jsonl(path_15)
         rows_60 = read_jsonl(path_60)
 
-        hit15, n15 = compute_hit_rate(rows_15, 15 * 60 * 1000)
-        hit60, n60 = compute_hit_rate(rows_60, 60 * 60 * 1000)
+        hit15, n15 = compute_hit_rate(rows_15)
+        hit60, n60 = compute_hit_rate(rows_60)
 
+        # نكتب ملخص العملة
         sym_summary = {
             "symbol": sym,
-        }
-        h24 = {}
-
-        if n15 > 0 and hit15 is not None:
-            h24["hit15"] = hit15
-            h24["n15"] = n15
-
-        if n60 > 0 and hit60 is not None:
-            h24["hit60"] = hit60
-            h24["n60"] = n60
-
-        # لو ما في أي صفقات في آخر 24 ساعة → لا نكتب h24
-        if h24:
-            sym_summary["h24"] = h24
-            # هذا يُستخدم في الصفحة الرئيسية
-            global_summary[sym] = {
-                "h24": {
-                    "hit15": h24.get("hit15"),
-                    "hit60": h24.get("hit60"),
-                }
+            "h24": {
+                "hit15": hit15,
+                "n15": n15,
+                "hit60": hit60,
+                "n60": n60
             }
+        }
 
         out_path = os.path.join(sym_dir, "summary.json")
         with open(out_path, "w", encoding="utf-8") as f:
             json.dump(sym_summary, f, ensure_ascii=False, indent=2)
 
-        print(f"[summarize] {sym}: h24={h24 if h24 else 'no trades in last 24h'}")
+        print(f"[summarize] {sym}: h24={sym_summary['h24']}")
 
-    # الملف العمومي للصفحة الرئيسية
+        # ملخص مختصر للصفحة الرئيسية
+        global_summary[sym] = {
+            "h24": {
+                "hit15": hit15,
+                "hit60": hit60
+            }
+        }
+
+    # الملف العمومي للواجهة الرئيسية
     summary_path = os.path.join(data_root, "summary.json")
     with open(summary_path, "w", encoding="utf-8") as f:
         json.dump(global_summary, f, ensure_ascii=False, indent=2)
