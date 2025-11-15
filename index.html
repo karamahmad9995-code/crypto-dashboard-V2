@@ -707,58 +707,128 @@ async function buildHome(){
 }
 
 async function openCoin(sym){
+  // إيقاف الجداول الزمنية القديمة
   stopAutoSchedulers();
-  activeSym = (SYMBOLS.indexOf(sym)>=0? sym : 'BTCUSDT');
-  document.getElementById('homeView').style.display='none';
-  document.getElementById('coinView').style.display='';
-  document.getElementById('symName').textContent=activeSym;
+  activeSym = (SYMBOLS.indexOf(sym) >= 0 ? sym : 'BTCUSDT');
+
+  // تفعيل واجهة العملة
+  document.getElementById('homeView').style.display = 'none';
+  document.getElementById('coinView').style.display = '';
+  document.getElementById('symName').textContent = activeSym;
   clearPredictionCards();
   resetSpark();
   initCharts();
 
-  if(!rangeBtnsBound){
-    Array.prototype.forEach.call(document.querySelectorAll('.pill.range'), function(b){ b.addEventListener('click', function(){ loadGeneral(b.dataset.range); }); });
-    rangeBtnsBound=true;
+  // ربط أزرار الفترات في الشارت العام
+  if (!rangeBtnsBound) {
+    Array.prototype.forEach.call(
+      document.querySelectorAll('.pill.range'),
+      function (b) {
+        b.addEventListener('click', function () {
+          loadGeneral(b.dataset.range);
+        });
+      }
+    );
+    rangeBtnsBound = true;
   }
-  document.getElementById('contrarian').onclick=function(){
-    contrarian=!contrarian;
-    var el=document.getElementById('contrarian');
-    el.textContent=contrarian?'On':'Off'; el.classList.toggle('on',contrarian);
+
+  // زر عكس الاتجاه (contrarian)
+  document.getElementById('contrarian').onclick = function () {
+    contrarian = !contrarian;
+    var el = document.getElementById('contrarian');
+    el.textContent = contrarian ? 'On' : 'Off';
+    el.classList.toggle('on', contrarian);
   };
-  document.getElementById('btnStart').onclick=function(){ (liveTimer?stopLive():startLive()); };
-  document.getElementById('btnPredictNow15').onclick=function(){ performPrediction(15,'manual'); };
-  document.getElementById('btnPredictNow60').onclick=function(){ performPrediction(60,'manual'); };
 
-  try{
-    var price = await fetchPrice(activeSym);
-    document.getElementById('currPrice').innerHTML='<strong>'+formatPriceDyn(price)+'</strong> USD';
-    updateSpark(price); addLivePoint(price);
-  }catch(e){}
+  // زر البث الحي
+  document.getElementById('btnStart').onclick = function () {
+    (liveTimer ? stopLive() : startLive());
+  };
 
+  // أزرار التوقع اليدوي
+  document.getElementById('btnPredictNow15').onclick = function () {
+    performPrediction(15, 'manual');
+  };
+  document.getElementById('btnPredictNow60').onclick = function () {
+    performPrediction(60, 'manual');
+  };
+
+  // تحديث السعر الحالي + تحميل الشارت العام
+  try { await fetchPriceAndUpdate(); } catch (e) {}
   await loadGeneral('24h');
-  if(!generalStarted){ startGeneralAuto(); generalStarted=true; }
+  if (!generalStarted) {
+    startGeneralAuto();
+    generalStarted = true;
+  }
 
+  // تهيئة جداول التقييم
+  var b15 = document.getElementById('evalBody15');
+  var b60 = document.getElementById('evalBody60');
+  b15.innerHTML = '';
+  b60.innerHTML = '';
+
+  var latest15 = null;
+  var latest60 = null;
+
+  // 1) تحميل سجل التوقعات التلقائية من GitHub (15m & 60m)
+  try {
+    var remoteHist = await loadRemoteHistory(activeSym);
+    var r15 = (remoteHist && remoteHist.a15) ? remoteHist.a15.slice() : [];
+    var r60 = (remoteHist && remoteHist.a60) ? remoteHist.a60.slice() : [];
+
+    // نرتب من الأقدم إلى الأحدث، لأن addEvalRow يستخدم prepend
+    r15.sort(function (a, b) { return a.t - b.t; });
+    r60.sort(function (a, b) { return a.t - b.t; });
+
+    r15.forEach(function (it) {
+      addEvalRow(15, it);
+      latest15 = it;
+    });
+    r60.forEach(function (it) {
+      addEvalRow(60, it);
+      latest60 = it;
+    });
+  } catch (e) {
+    console.error('loadRemoteHistory error', e);
+  }
+
+  // 2) تحميل التوقعات المحلية (from localStorage) – غالباً Manual
   var st = readState(activeSym);
-  var b15=document.getElementById('evalBody15'), b60=document.getElementById('evalBody60');
-  b15.innerHTML=''; b60.innerHTML='';
-  (st.eval15||[]).slice(0,100).reverse().forEach(function(it){ addEvalRow(15,it) });
-  (st.eval60||[]).slice(0,100).reverse().forEach(function(it){ addEvalRow(60,it) });
 
-  if(st.eval15 && st.eval15.length) setPredictionCardFromRow(15, st.eval15[0]);
-  if(st.eval60 && st.eval60.length) setPredictionCardFromRow(60, st.eval60[0]);
+  (st.eval15 || []).slice(0, 200).reverse().forEach(function (it) {
+    addEvalRow(15, it);
+    if (!latest15) latest15 = it;
+  });
 
-  try{
-    var remote = await fetchJSON('./data/'+activeSym+'/summary.json');
-    if(remote && remote.h24){
-      document.getElementById('modelInfo').innerHTML = '<span class="badge ok">calibrated</span> <span class="muted">24h hit 15m:'+remote.h24.hit15+'% · 60m:'+remote.h24.hit60+'%</span>';
-    }else{
-      document.getElementById('modelInfo').innerHTML = '<span class="badge">default v1</span>';
+  (st.eval60 || []).slice(0, 200).reverse().forEach(function (it) {
+    addEvalRow(60, it);
+    if (!latest60) latest60 = it;
+  });
+
+  // 3) عرض آخر توقع في الكروت العليا
+  if (latest15) setPredictionCardFromRow(15, latest15);
+  if (latest60) setPredictionCardFromRow(60, latest60);
+
+  // 4) تحميل ملخص الأداء 24h لهذه العملة
+  try {
+    var remote = await fetchJSON('./data/' + activeSym + '/summary.json');
+    if (remote && remote.h24) {
+      document.getElementById('modelInfo').innerHTML =
+        '<span class="badge ok">calibrated</span> ' +
+        '<span class="muted">24h hit 15m:' + remote.h24.hit15 +
+        '% · 60m:' + remote.h24.hit60 + '%</span>';
+    } else {
+      document.getElementById('modelInfo').innerHTML =
+        '<span class="badge">default v1</span>';
     }
-  }catch(e){ document.getElementById('modelInfo').innerHTML = '<span class="badge">default v1</span>'; }
+  } catch (e) {
+    document.getElementById('modelInfo').innerHTML =
+      '<span class="badge">default v1</span>';
+  }
 
+  // 5) تشغيل الجدولة التلقائية لتوقعات 15m و 60m
   startAutoSchedulers();
 }
-
 var sparkIdx=0, sparkBatch=0, sparkVals=new Array(SPARK_N).fill(null);
 
 (function boot(){
