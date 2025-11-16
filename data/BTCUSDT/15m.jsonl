@@ -45,3 +45,4 @@
 {"id": "1763322041753-15", "t": 1763322041753, "src": "auto", "dir": "Down", "conf": 0.95, "range": [0.11000000000000001, 0.2], "priceLo": 94000.3226, "priceHi": 94085.09243, "base": 94188.7, "horizon": 15, "outcome": "No-Trade"}
 {"id": "1763322645297-15", "t": 1763322645297, "src": "auto", "dir": "Up", "conf": 0.95, "range": [0.11000000000000001, 0.2], "priceLo": 94377.371037, "priceHi": 94462.21734, "base": 94273.67, "horizon": 15, "outcome": "No-Trade"}
 {"id": "1763325318302-15", "t": 1763325318302, "src": "auto", "dir": "Down", "conf": 0.95, "range": [0.11000000000000001, 0.2], "priceLo": 94227.95641999999, "priceHi": 94312.931531, "base": 94416.79, "horizon": 15, "outcome": "No-Trade"}
+{"id": "1763326230521-15", "t": 1763326230521, "src": "auto", "dir": "Down", "conf": 0.95, "range": [0.11000000000000001, 0.2], "priceLo": 94023.84546, "priceHi": 94108.636503, "base": 94212.27, "horizon": 15, "outcome": "No-Trade"}
