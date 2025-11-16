@@ -8,37 +8,37 @@
   "ETHUSDT": {
     "h24": {
       "hit15": 67,
-      "hit60": 20
+      "hit60": 29
     }
   },
   "XRPUSDT": {
     "h24": {
       "hit15": 50,
-      "hit60": 17
+      "hit60": 38
     }
   },
   "BNBUSDT": {
     "h24": {
       "hit15": 50,
-      "hit60": 57
+      "hit60": 67
     }
   },
   "SOLUSDT": {
     "h24": {
       "hit15": 25,
-      "hit60": 50
+      "hit60": 53
     }
   },
   "DOGEUSDT": {
     "h24": {
       "hit15": 50,
-      "hit60": 50
+      "hit60": 43
     }
   },
   "ADAUSDT": {
     "h24": {
       "hit15": 33,
-      "hit60": 57
+      "hit60": 50
     }
   },
   "LTCUSDT": {
@@ -49,14 +49,14 @@
   },
   "SHIBUSDT": {
     "h24": {
-      "hit15": 43,
-      "hit60": 36
+      "hit15": 50,
+      "hit60": 31
     }
   },
   "PUMPUSDT": {
     "h24": {
-      "hit15": 50,
-      "hit60": 50
+      "hit15": 55,
+      "hit60": 56
     }
   }
 }
