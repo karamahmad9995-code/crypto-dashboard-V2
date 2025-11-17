@@ -70,3 +70,4 @@
 {"id": "1763394137787-60", "t": 1763394137787, "src": "auto", "dir": "Down", "conf": 0.95, "range": [1.1, 2.0], "priceLo": 0.00306054, "priceHi": 0.003088647, "base": 0.003123, "horizon": 60, "outcome": "Correct"}
 {"id": "1763394955168-60", "t": 1763394955168, "src": "auto", "dir": "Down", "conf": 0.95, "range": [1.1, 2.0], "priceLo": 0.00302134, "priceHi": 0.003049087, "base": 0.003083, "horizon": 60, "outcome": "Correct"}
 {"id": "1763398524199-60", "t": 1763398524199, "src": "auto", "dir": "Down", "conf": 0.6645318793257536, "range": [0.16823828990277898, 0.3058877998232345], "priceLo": 0.0030845358314734693, "priceHi": 0.003088794707310408, "base": 0.003094, "horizon": 60, "outcome": "Pending"}
+{"id": "1763401842999-60", "t": 1763401842999, "src": "auto", "dir": "Down", "conf": 0.9039489889653624, "range": [1.1, 2.0], "priceLo": 0.00288806, "priceHi": 0.002914583, "base": 0.002947, "horizon": 60, "outcome": "Pending"}
