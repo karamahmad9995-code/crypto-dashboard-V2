@@ -2,60 +2,60 @@
   "BTCUSDT": {
     "h24": {
       "hit15": 20,
-      "hit60": 42
+      "hit60": 50
     }
   },
   "ETHUSDT": {
     "h24": {
       "hit15": 50,
-      "hit60": 46
+      "hit60": 50
     }
   },
   "XRPUSDT": {
     "h24": {
       "hit15": 50,
-      "hit60": 45
+      "hit60": 50
     }
   },
   "BNBUSDT": {
     "h24": {
       "hit15": 14,
-      "hit60": 15
+      "hit60": 17
     }
   },
   "SOLUSDT": {
     "h24": {
       "hit15": 50,
-      "hit60": 62
+      "hit60": 64
     }
   },
   "DOGEUSDT": {
     "h24": {
       "hit15": 60,
-      "hit60": 55
+      "hit60": 60
     }
   },
   "ADAUSDT": {
     "h24": {
       "hit15": 44,
-      "hit60": 50
+      "hit60": 56
     }
   },
   "LTCUSDT": {
     "h24": {
       "hit15": 50,
-      "hit60": 38
+      "hit60": 42
     }
   },
   "SHIBUSDT": {
     "h24": {
-      "hit15": 58,
-      "hit60": 79
+      "hit15": 60,
+      "hit60": 77
     }
   },
   "PUMPUSDT": {
     "h24": {
-      "hit15": 50,
+      "hit15": 55,
       "hit60": 50
     }
   }
