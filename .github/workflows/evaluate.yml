@@ -3,10 +3,10 @@ name: Evaluate predictions
 on:
   workflow_dispatch:        # تشغيل يدوي من Actions
   schedule:
-    - cron: "*/10 * * * *"  # كل 10 دقائق (تقدر تعدلها لاحقاً)
+    - cron: "*/10 * * * *"  # كل 10 دقائق
 
 permissions:
-  contents: write           # للسماح بالـ commit
+  contents: write           # للسماح بالكتابة إلى الريبو
 
 jobs:
   evaluate:
@@ -27,7 +27,7 @@ jobs:
 
       - name: Commit & push evaluation updates
         run: |
-          if [[ -n "$(git status --porcelain)" ]]; then
+          if [[ -n "$(git status --porcelain data)" ]]; then
             git config user.name "github-actions"
             git config user.email "github-actions@users.noreply.github.com"
             git add data
