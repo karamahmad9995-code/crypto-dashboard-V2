@@ -14,25 +14,25 @@
   "XRPUSDT": {
     "h24": {
       "hit15": 0,
-      "hit60": 50
+      "hit60": 0
     }
   },
   "BNBUSDT": {
     "h24": {
       "hit15": 0,
-      "hit60": 50
+      "hit60": 0
     }
   },
   "SOLUSDT": {
     "h24": {
       "hit15": 0,
-      "hit60": 50
+      "hit60": 0
     }
   },
   "DOGEUSDT": {
     "h24": {
       "hit15": 0,
-      "hit60": 50
+      "hit60": 0
     }
   },
   "ADAUSDT": {
@@ -44,7 +44,7 @@
   "LTCUSDT": {
     "h24": {
       "hit15": 0,
-      "hit60": 50
+      "hit60": 0
     }
   },
   "SHIBUSDT": {
@@ -56,7 +56,7 @@
   "PUMPUSDT": {
     "h24": {
       "hit15": 0,
-      "hit60": 50
+      "hit60": 0
     }
   }
 }
