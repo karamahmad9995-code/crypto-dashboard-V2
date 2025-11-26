@@ -1,12 +1,24 @@
 name: Run predictions (15m & 60m)
 
 on:
-  workflow_dispatch:        # تشغيل يدوي
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Run immediately (ignore UTC boundary)'
+        type: boolean
+        default: false
   schedule:
-    - cron: "*/15 * * * *"  # كل 15 دقيقة
+    # كل 15 دقيقة
+    - cron: "*/15 * * * *"
+    # مرة كل ساعة عند الدقيقة 0
+    - cron: "0 * * * *"
 
 permissions:
-  contents: write           # للسماح بالـ commit التلقائي
+  contents: write
+
+concurrency:
+  group: predict
+  cancel-in-progress: true
 
 jobs:
   run-predict:
@@ -16,20 +28,29 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Set up Node
+        uses: actions/setup-node@v4
         with:
-          python-version: "3.11"
+          node-version: "20"
+
+      # لو مستقبلاً أضفت dependencies في package.json
+      - name: Install dependencies
+        run: |
+          if [ -f package.json ]; then
+            npm ci || npm install
+          fi
 
       - name: Run prediction script
-        run: |
-          python scripts/run_predict.py
+        env:
+          SYMBOLS: "BTCUSDT,ETHUSDT,XRPUSDT,BNBUSDT,SOLUSDT,DOGEUSDT,ADAUSDT,LTCUSDT,SHIBUSDT,PUMPUSDT"
+          FORCE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.force == 'true' && '1' || '0' }}
+        run: node scripts/run-predict.js
 
       - name: Commit & push prediction data
         run: |
-          if [[ -n "$(git status --porcelain)" ]]; then
-            git config user.name "github-actions"
-            git config user.email "github-actions@users.noreply.github.com"
+          if [ -n "$(git status --porcelain)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
             git add data
             git commit -m "Update predictions (15m & 60m) [skip ci]"
             git push
