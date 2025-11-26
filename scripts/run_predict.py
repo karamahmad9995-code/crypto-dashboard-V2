@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Predict script for crypto-dashboard-V2
+run_predict.py
 
-- يحاول يجلب بيانات 1m من أكثر من مصدر (Binance → CryptoCompare → CoinCap).
-- لكل عملة ولكل أفق زمني (15m / 60m) يعمل توقع واحد فقط لكل فتحة زمنية.
-- لو فشلت عملة لا يوقف السكربت بالكامل، فقط يطبع رسالة خطأ ويكمل الباقي.
-- يكتب النتائج في: data/{SYMBOL}/{HORIZON}m.jsonl
-  بنفس الشكل الذي تستخدمه الواجهة الأمامية.
+سكربت بسيط لتوليد توقع واحد لكل عملة ولكل أفق زمني (15m / 60m)
+ويكتب النتائج في ملفات jsonl تحت مجلد data/ بنفس الفورمات الذي
+تستخدمه الواجهة الأمامية.
+
+- يعتمد على أسعار 1m من Binance.
+- لا يوقف السكربت بالكامل لو فشلت عملة معيّنة.
 """
 
 import os
@@ -20,32 +21,25 @@ from pathlib import Path
 
 import requests
 
-# ----------------- إعدادات عامة -----------------
+# ----------------- إعداد عام -----------------
 
 SYMBOLS_DEFAULT = [
-    "BTCUSDT", "ETHUSDT", "XRPUSDT", "BNBUSDT", "SOLUSDT",
-    "DOGEUSDT", "ADAUSDT", "LTCUSDT", "SHIBUSDT", "PUMPUSDT",
+    "BTCUSDT",
+    "ETHUSDT",
+    "XRPUSDT",
+    "BNBUSDT",
+    "SOLUSDT",
+    "DOGEUSDT",
+    "ADAUSDT",
+    "LTCUSDT",
+    "SHIBUSDT",
+    "PUMPUSDT",
 ]
 
-HORIZONS_DEFAULT = [15, 60]  # بالدقائق
+# الآفاق الزمنية الافتراضية بالدقائق
+HORIZONS_DEFAULT = [15, 60]
 
 BINANCE_BASE = "https://api.binance.com"
-CC_MINUTE_URL = "https://min-api.cryptocompare.com/data/v2/histominute"
-CC_HOUR_URL = "https://min-api.cryptocompare.com/data/v2/histohour"
-COINCAP_CANDLES_URL = "https://api.coincap.io/v2/candles"
-
-COINCAP_IDS = {
-    "BTC": "bitcoin",
-    "ETH": "ethereum",
-    "XRP": "xrp",
-    "BNB": "binance-coin",
-    "SOL": "solana",
-    "DOGE": "dogecoin",
-    "ADA": "cardano",
-    "LTC": "litecoin",
-    "SHIB": "shiba-inu",
-    "PUMP": "pump",
-}
 
 SESSION = requests.Session()
 SESSION.headers.update(
@@ -53,14 +47,19 @@ SESSION.headers.update(
 )
 
 
-# ----------------- دوال مساعدة عامة -----------------
-
 def log(msg: str) -> None:
     ts = time.strftime("[%Y-%m-%d %H:%M:%S]", time.gmtime())
     print(f"{ts} {msg}", flush=True)
 
 
+# ----------------- قراءة الإعدادات -----------------
+
+
 def parse_symbols():
+    """
+    - من متغيّر البيئة SYMBOLS = "BTCUSDT,ETHUSDT,..."
+    - أو من القائمة الافتراضية أعلاه.
+    """
     env = os.getenv("SYMBOLS")
     if env:
         return [s.strip().upper() for s in env.split(",") if s.strip()]
@@ -68,9 +67,12 @@ def parse_symbols():
 
 
 def parse_horizons():
-    # يمكن تمرير الأفق من:
-    # - متغير بيئة HORIZON_MINUTES أو HORIZON
-    # - أو كـ argument: python predict.py 15
+    """
+    الأفق الزمني يمكن تحديده عن طريق:
+    - متغير البيئة HORIZON_MINUTES أو HORIZON
+    - أو أول argument:  python scripts/run_predict.py 15
+    وإلا يستخدم HORIZONS_DEFAULT.
+    """
     env_h = os.getenv("HORIZON_MINUTES") or os.getenv("HORIZON")
     arg_h = None
     if len(sys.argv) > 1:
@@ -90,101 +92,8 @@ def parse_horizons():
     return HORIZONS_DEFAULT[:]
 
 
-def fetch_json(url, params=None, retries: int = 3, timeout: int = 10):
-    last_exc = None
-    for attempt in range(1, retries + 1):
-        try:
-            resp = SESSION.get(url, params=params, timeout=timeout)
-            if resp.status_code == 429:
-                wait = 5 * attempt
-                log(f"rate limited {resp.status_code} on {url}, sleep {wait}s")
-                time.sleep(wait)
-                continue
-            resp.raise_for_status()
-            return resp.json()
-        except Exception as exc:  # noqa: BLE001
-            last_exc = exc
-            log(f"warn: fetch_json attempt {attempt} failed for {url}: {exc}")
-            time.sleep(1 * attempt)
-    raise last_exc or RuntimeError(f"fetch_json failed for {url}")
+# ----------------- دوال مساعدة للـ indicators -----------------
 
-
-# ----------------- جلب بيانات 1m -----------------
-
-def fetch_klines_1m(symbol: str, limit: int = 120):
-    """
-    يحاول يجلب بيانات 1m من:
-    1) Binance
-    2) CryptoCompare
-    3) CoinCap
-    لو فشل الكل → يرمي خطأ.
-    """
-    base = symbol.replace("USDT", "")
-
-    # 1) Binance
-    try:
-        data = fetch_json(
-            f"{BINANCE_BASE}/api/v3/klines",
-            params={"symbol": symbol, "interval": "1m", "limit": limit},
-        )
-        if isinstance(data, list) and len(data) >= 2:
-            return [{"t": int(k[0]), "c": float(k[4])} for k in data]
-    except Exception as exc:  # noqa: BLE001
-        log(f"info: Binance klines failed for {symbol}: {exc}")
-
-    # 2) CryptoCompare (minute)
-    try:
-        j = fetch_json(
-            CC_MINUTE_URL,
-            params={"fsym": base, "tsym": "USD", "limit": limit},
-        )
-        dlist = j.get("Data", {}).get("Data") or []
-        if dlist:
-            return [
-                {"t": int(p["time"]) * 1000, "c": float(p["close"])}
-                for p in dlist
-            ]
-    except Exception as exc:  # noqa: BLE001
-        log(f"info: CryptoCompare minute failed for {symbol}: {exc}")
-
-    # 3) CoinCap candles (m1)
-    try:
-        asset_id = COINCAP_IDS.get(base)
-        if asset_id:
-            now_ms = int(time.time() * 1000)
-            start = now_ms - limit * 60 * 1000
-            params = {
-                "exchange": "binance",
-                "interval": "m1",
-                "base": asset_id,
-                "quote": "usd",
-                "start": start,
-                "end": now_ms,
-            }
-            j = fetch_json(COINCAP_CANDLES_URL, params=params)
-            dlist = j.get("data") or []
-            if dlist:
-                out = []
-                for item in dlist:
-                    t = item.get("period") or item.get("time") or item.get("timestamp")
-                    if t is None:
-                        continue
-                    if "close" in item:
-                        c = float(item["close"])
-                    elif "priceClose" in item:
-                        c = float(item["priceClose"])
-                    else:
-                        continue
-                    out.append({"t": int(t), "c": c})
-                if out:
-                    return out
-    except Exception as exc:  # noqa: BLE001
-        log(f"info: CoinCap candles failed for {symbol}: {exc}")
-
-    raise RuntimeError(f"No klines available for {symbol}")
-
-
-# ----------------- نموذج التوقع البسيط -----------------
 
 def ema(series, span: int):
     k = 2.0 / (span + 1.0)
@@ -205,6 +114,9 @@ def stddev(vals):
 
 
 def rsi14(closes):
+    """
+    RSI بسيط لفترة 14.
+    """
     if len(closes) < 15:
         return 50.0
     gains = 0.0
@@ -222,7 +134,9 @@ def rsi14(closes):
 
 
 def build_features(closes):
-    # نستخدم آخر 60 نقطة لعمل المؤشرات
+    """
+    يبني مجموعة صغيرة من الـ features من آخر ~60 دقيقة.
+    """
     window = closes[-60:] if len(closes) >= 60 else closes[:]
     ema5 = ema(window, 5)
     ema15 = ema(window, 15)
@@ -252,7 +166,13 @@ def sigmoid(z: float) -> float:
 
 
 def predict_simple(feat):
-    # نفس الفكرة التقريبية الموجودة في الواجهة
+    """
+    موديل بسيط جداً (مشروع تعليمي) مبني بنفس الفكرة الموجودة في الـ frontend.
+    يرجع:
+      - الاتجاه Up/Down
+      - مستوى الثقة
+      - مدى الحركة المتوقعة كنسبة مئوية [lo, hi]
+    """
     mu = [50.0, 0.0, 0.0, 0.0, 0.0, 0.003]
     sd = [12.0, 0.5, 0.3, 0.01, 0.005, 0.002]
     W = [0.35, 0.45, 0.25, 0.80, 0.30, -0.15]
@@ -272,12 +192,14 @@ def predict_simple(feat):
         z += w * ((xi - mu_i) / (sd_i or 1.0))
 
     p_up = sigmoid(z)
-    # كسر التعادل الخفيف لو p=0.5
+
+    # كسر التعادل الخفيف لو p قريب من 0.5
     if abs(p_up - 0.5) < 1e-3:
         p_up += (random.random() - 0.5) * 0.02
 
     direction = "Up" if p_up >= 0.5 else "Down"
     conf = max(0.55, min(0.95, max(p_up, 1.0 - p_up)))
+
     rng = max(
         0.2,
         min(
@@ -287,6 +209,7 @@ def predict_simple(feat):
     )
     lo = max(0.10, rng * 0.55)
     hi = rng
+
     return {
         "direction": direction,
         "confidence": conf,
@@ -294,7 +217,8 @@ def predict_simple(feat):
     }
 
 
-# ----------------- التعامل مع الملفات -----------------
+# ----------------- التعامل مع ملفات data/ -----------------
+
 
 def ensure_dir(p: Path) -> None:
     p.mkdir(parents=True, exist_ok=True)
@@ -319,6 +243,9 @@ def read_last_record(path: Path):
 
 
 def same_slot(t1_ms: int, t2_ms: int, horizon_min: int) -> bool:
+    """
+    نتأكد أننا لا نكتب أكثر من توقع واحد لكل فتحة زمنية.
+    """
     slot1 = int(t1_ms) // (horizon_min * 60 * 1000)
     slot2 = int(t2_ms) // (horizon_min * 60 * 1000)
     return slot1 == slot2
@@ -330,7 +257,24 @@ def write_record(path: Path, obj: dict) -> None:
         f.write(json.dumps(obj, sort_keys=True) + "\n")
 
 
+# ----------------- جلب بيانات 1m من Binance -----------------
+
+
+def fetch_klines_1m(symbol: str, limit: int = 120):
+    """
+    يجلب kline 1m من Binance:
+    - لو فشل يرمي استثناء (سيتم التعامل معه في مستوى أعلى).
+    """
+    url = f"{BINANCE_BASE}/api/v3/klines"
+    params = {"symbol": symbol, "interval": "1m", "limit": limit}
+    resp = SESSION.get(url, params=params, timeout=10)
+    resp.raise_for_status()
+    data = resp.json()
+    return [{"t": int(k[0]), "c": float(k[4])} for k in data]
+
+
 # ----------------- منطق التوقع لكل عملة -----------------
+
 
 def predict_for_symbol(symbol: str, horizon_min: int) -> None:
     try:
@@ -350,21 +294,22 @@ def predict_for_symbol(symbol: str, horizon_min: int) -> None:
         data_dir = Path("data") / symbol
         out_path = data_dir / f"{horizon_min}m.jsonl"
 
+        # لا نكرّر التوقع داخل نفس الفتحة الزمنية
         last_rec = read_last_record(out_path)
         if last_rec and "t" in last_rec and same_slot(last_rec["t"], now_ms, horizon_min):
-            log(f"{symbol} {horizon_min}m: already have prediction for this slot, skip")
+            log(f"{symbol} {horizon_min}m: already have prediction for this slot, skipping")
             return
 
-        lo_pct, hi_pct = pred["rangePct"]
         direction = pred["direction"]
         conf = float(pred["confidence"])
+        lo_pct, hi_pct = pred["rangePct"]
 
         if direction == "Up":
-            price_lo = base_price * (1.0 + lo_pct / 100.0)
+            price_lo = base_price * (1.0 - lo_pct / 100.0)
             price_hi = base_price * (1.0 + hi_pct / 100.0)
         else:
             price_lo = base_price * (1.0 - hi_pct / 100.0)
-            price_hi = base_price * (1.0 - lo_pct / 100.0)
+            price_hi = base_price * (1.0 + lo_pct / 100.0)
 
         record = {
             "id": f"{symbol}-{now_ms}-{horizon_min}",
@@ -393,6 +338,7 @@ def predict_for_symbol(symbol: str, horizon_min: int) -> None:
 
 
 # ----------------- main -----------------
+
 
 def main():
     symbols = parse_symbols()
