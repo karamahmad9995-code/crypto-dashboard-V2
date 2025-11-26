@@ -1,29 +1,12 @@
-- name: Install dependencies
-  run: |
-    python -m pip install --upgrade pip
-    pip install requests
-
 name: Run predictions (15m & 60m)
 
 on:
   workflow_dispatch:
-    inputs:
-      force:
-        description: 'Run immediately (ignore UTC boundary)'
-        type: boolean
-        default: false
   schedule:
-    # كل 15 دقيقة
-    - cron: "*/15 * * * *"
-    # مرة كل ساعة عند الدقيقة 0
-    - cron: "0 * * * *"
+    - cron: "*/15 * * * *"   # كل 15 دقيقة
 
 permissions:
   contents: write
-
-concurrency:
-  group: predict
-  cancel-in-progress: true
 
 jobs:
   run-predict:
@@ -33,32 +16,32 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Set up Node
-        uses: actions/setup-node@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          node-version: "20"
+          python-version: "3.11"
 
-      # لو مستقبلاً أضفت dependencies في package.json
       - name: Install dependencies
         run: |
-          if [ -f package.json ]; then
-            npm ci || npm install
-          fi
+          python -m pip install --upgrade pip
+          pip install requests
 
       - name: Run prediction script
         env:
-          SYMBOLS: "BTCUSDT,ETHUSDT,XRPUSDT,BNBUSDT,SOLUSDT,DOGEUSDT,ADAUSDT,LTCUSDT,SHIBUSDT,PUMPUSDT"
-          FORCE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.force == 'true' && '1' || '0' }}
-        run: node scripts/run-predict.js
+          # لو حاب تغيّر العملات أو الآفاق من الـ workflow
+          # SYMBOLS: "BTCUSDT,ETHUSDT,XRPUSDT"
+          # HORIZON_MINUTES: "15"
+          :
+        run: python scripts/run_predict.py
 
       - name: Commit & push prediction data
         run: |
-          if [ -n "$(git status --porcelain)" ]; then
+          if [ -n "$(git status --porcelain data)" ]; then
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git add data
             git commit -m "Update predictions (15m & 60m) [skip ci]"
             git push
           else
-            echo "No changes to commit."
+            echo "No prediction changes to commit."
           fi
